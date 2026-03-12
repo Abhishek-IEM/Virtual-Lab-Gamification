@@ -9,9 +9,12 @@ import {
 } from "@react-three/drei";
 import { CuboidCollider, Physics, RigidBody } from "@react-three/rapier";
 import * as THREE from "three";
+import gsap from "gsap";
 import "./LabRenderer.css";
 
-const WORKSPACE_BOUNDS = { width: 8.2, depth: 5.2, y: 0.58 };
+// Lab bench surface sits at y = 0.0 (world). Equipment placed on top at y = BENCH_TOP.
+const BENCH_TOP = 0.0;
+const WORKSPACE_BOUNDS = { width: 8.2, depth: 5.2, y: BENCH_TOP };
 
 const EQUIPMENT_NAMES = {
   acid: "Acid Bottle",
@@ -90,16 +93,21 @@ export default function LabRenderer({
       </div>
 
       <Canvas
-        shadows
-        camera={{ position: [6.3, 4.2, 7.1], fov: 47, near: 0.1, far: 200 }}
+        shadows="soft"
+        camera={{ position: [0, 4.5, 11], fov: 52, near: 0.1, far: 120 }}
+        gl={{
+          antialias: true,
+          toneMapping: THREE.ACESFilmicToneMapping,
+          toneMappingExposure: 0.92,
+        }}
       >
-        <color attach="background" args={["#e9f3ff"]} />
-        <fog attach="fog" args={["#e9f3ff", 12, 28]} />
-        <SoftShadows samples={18} size={20} focus={0.5} />
+        {/* HDRI environment map – provides realistic reflections on glass/metal */}
+        <Environment preset="warehouse" background={false} />
+        <SoftShadows samples={24} size={22} focus={0.45} />
 
-        <Physics gravity={[0, -6, 0]}>
+        <Physics gravity={[0, -9.81, 0]}>
+          <LabRoom />
           <LabLights />
-          <Workbench />
 
           {experimentId === "acid-base-neutralization" && (
             <AcidBaseScene
@@ -142,7 +150,7 @@ export default function LabRenderer({
           <WorkbenchCollider />
         </Physics>
 
-        <Environment preset="city" />
+        {/* No <Environment> duplicate here – already declared above Physics */}
       </Canvas>
 
       <div className="scene-overlay-bottom">
@@ -157,53 +165,414 @@ export default function LabRenderer({
   );
 }
 
-function LabLights() {
-  return (
-    <>
-      <ambientLight intensity={0.52} color="#f5f9ff" />
-      <directionalLight
-        position={[6, 8, 3]}
-        intensity={1.25}
-        color="#fff9ee"
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-camera-near={1}
-        shadow-camera-far={25}
-        shadow-camera-left={-8}
-        shadow-camera-right={8}
-        shadow-camera-top={8}
-        shadow-camera-bottom={-8}
-      />
-      <pointLight position={[-4, 3, -2]} intensity={0.22} color="#9fd8ff" />
-      <pointLight position={[3.5, 2.5, 3]} intensity={0.2} color="#ffc68a" />
-    </>
-  );
-}
+// ─── LAB ROOM ────────────────────────────────────────────────────────────────
+// All geometry is centred on the bench. Room is 20 × 8 × 14 (W × H × D).
+const R = { w: 20, h: 8.5, d: 14 };
 
-function Workbench() {
+function LabRoom() {
   return (
     <group>
-      <mesh position={[0, -0.05, 0]} receiveShadow>
-        <boxGeometry args={[9.5, 0.2, 6.1]} />
-        <meshStandardMaterial color="#d7e4f2" roughness={0.58} />
+      {/* ── Floor: large grey-white ceramic tiles ── */}
+      <mesh
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, -3.6, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[R.w, R.d]} />
+        <meshStandardMaterial
+          color="#dce6ef"
+          roughness={0.38}
+          metalness={0.06}
+        />
       </mesh>
-      <mesh position={[0, -0.42, 0]} receiveShadow>
-        <boxGeometry args={[9.9, 0.4, 6.5]} />
-        <meshStandardMaterial color="#9aa7b7" roughness={0.76} />
-      </mesh>
+      {/* tile grid lines painted on top */}
       <gridHelper
-        args={[10, 24, new THREE.Color("#9eb3cc"), new THREE.Color("#d3dfec")]}
-        position={[0, 0.06, 0]}
+        args={[20, 20, new THREE.Color("#b8ccd8"), new THREE.Color("#cddde9")]}
+        position={[0, -3.595, 0]}
       />
+
+      {/* ── Ceiling ── */}
+      <mesh
+        rotation={[Math.PI / 2, 0, 0]}
+        position={[0, R.h - 3.6, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[R.w, R.d]} />
+        <meshStandardMaterial color="#f0f4f8" roughness={0.85} />
+      </mesh>
+
+      {/* ── Back wall ── */}
+      <mesh position={[0, R.h / 2 - 3.6, -R.d / 2]} receiveShadow>
+        <planeGeometry args={[R.w, R.h]} />
+        <meshStandardMaterial color="#e8eef5" roughness={0.8} />
+      </mesh>
+
+      {/* ── Left wall ── */}
+      <mesh
+        rotation={[0, Math.PI / 2, 0]}
+        position={[-R.w / 2, R.h / 2 - 3.6, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[R.d, R.h]} />
+        <meshStandardMaterial color="#eaf0f7" roughness={0.82} />
+      </mesh>
+
+      {/* ── Right wall (window strip) ── */}
+      <mesh
+        rotation={[0, -Math.PI / 2, 0]}
+        position={[R.w / 2, R.h / 2 - 3.6, 0]}
+        receiveShadow
+      >
+        <planeGeometry args={[R.d, R.h]} />
+        <meshStandardMaterial color="#e6ecf4" roughness={0.82} />
+      </mesh>
+
+      {/* ── Windows on right wall ── */}
+      <LabWindows />
+
+      {/* ── Lab bench ── */}
+      <LabBench />
+
+      {/* ── Background scenery ── */}
+      <LabShelves />
+      <LabCabinets />
+      <LabSink />
+      <LabSafetyPosters />
+
+      {/* ── Ceiling lamp fixtures ── */}
+      <CeilingLampFixture position={[-3, R.h - 3.65, -1]} />
+      <CeilingLampFixture position={[3, R.h - 3.65, -1]} />
+      <CeilingLampFixture position={[0, R.h - 3.65, 2.5]} />
     </group>
   );
 }
 
+function LabWindows() {
+  const glassMat = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: "#cce8ff",
+        transparent: true,
+        opacity: 0.28,
+        roughness: 0.02,
+        metalness: 0,
+        transmission: 0.88,
+        thickness: 0.18,
+        ior: 1.45,
+      }),
+    [],
+  );
+
+  return (
+    <group position={[R.w / 2 - 0.06, 0.4, 0]}>
+      {[-3.5, 3.5].map((z) => (
+        <group key={z} position={[0, 0, z]}>
+          {/* outer frame */}
+          <mesh rotation={[0, -Math.PI / 2, 0]}>
+            <planeGeometry args={[3.2, 3.2]} />
+            <meshStandardMaterial color="#c5d4e0" roughness={0.6} />
+          </mesh>
+          {/* glass pane */}
+          <mesh rotation={[0, -Math.PI / 2, 0]} position={[-0.04, 0, 0]}>
+            <planeGeometry args={[2.9, 2.9]} />
+            <primitive object={glassMat} attach="material" />
+          </mesh>
+          {/* bright sky fill behind window */}
+          <pointLight
+            position={[1.2, 0, 0]}
+            intensity={1.4}
+            distance={9}
+            color="#d6eeff"
+          />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+function LabBench() {
+  return (
+    <group>
+      {/* Bench top surface – light grey resin */}
+      <mesh position={[0, -0.12, 0.4]} receiveShadow castShadow>
+        <boxGeometry args={[10.2, 0.18, 5.8]} />
+        <meshStandardMaterial
+          color="#c8d8e8"
+          roughness={0.35}
+          metalness={0.08}
+        />
+      </mesh>
+      {/* Front edge strip – darker */}
+      <mesh position={[0, -0.22, 3.3]} receiveShadow>
+        <boxGeometry args={[10.2, 0.18, 0.08]} />
+        <meshStandardMaterial color="#9aafc4" roughness={0.4} />
+      </mesh>
+      {/* Cabinet body beneath bench */}
+      <mesh position={[0, -1.55, 0.4]} receiveShadow castShadow>
+        <boxGeometry args={[10.2, 2.7, 5.8]} />
+        <meshStandardMaterial color="#a8bccf" roughness={0.55} />
+      </mesh>
+      {/* Drawer handles row */}
+      {[-3.5, -1.2, 1.2, 3.5].map((x) => (
+        <mesh key={x} position={[x, -1.18, 3.31]} castShadow>
+          <boxGeometry args={[0.9, 0.12, 0.06]} />
+          <meshStandardMaterial
+            color="#8090a2"
+            metalness={0.55}
+            roughness={0.35}
+          />
+        </mesh>
+      ))}
+      {/* Legs */}
+      {[
+        [-4.7, -2.9, -2.5],
+        [4.7, -2.9, -2.5],
+        [-4.7, -2.9, 3.2],
+        [4.7, -2.9, 3.2],
+      ].map(([x, y, z]) => (
+        <mesh key={`${x}${z}`} position={[x, y, z]} castShadow>
+          <boxGeometry args={[0.22, 0.8, 0.22]} />
+          <meshStandardMaterial
+            color="#8898aa"
+            metalness={0.3}
+            roughness={0.5}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function LabShelves() {
+  const bottleColors = ["#ff9e9e", "#9ee8ff", "#fff08a", "#b2f5c8", "#d4b4ff"];
+
+  return (
+    <group position={[-8.5, 0, -3.5]}>
+      {/* shelf boards */}
+      {[1.4, 2.8, 4.2].map((y) => (
+        <mesh key={y} position={[0.12, y - 3.6, 0]} receiveShadow>
+          <boxGeometry args={[0.18, 0.06, 5.5]} />
+          <meshStandardMaterial color="#b8ccd8" roughness={0.6} />
+        </mesh>
+      ))}
+      {/* bottle silhouettes on shelves */}
+      {[1.4, 2.8, 4.2].map((sy) =>
+        bottleColors.map((col, i) => (
+          <mesh
+            key={`${sy}-${i}`}
+            position={[0.22, sy - 3.6 + 0.28, -2 + i * 0.95]}
+            castShadow
+          >
+            <cylinderGeometry args={[0.1, 0.11, 0.48, 18]} />
+            <meshPhysicalMaterial
+              color={col}
+              transparent
+              opacity={0.72}
+              roughness={0.12}
+              transmission={0.48}
+            />
+          </mesh>
+        )),
+      )}
+      {/* vertical bracket */}
+      <mesh position={[0.09, 0.9, 0]} castShadow>
+        <boxGeometry args={[0.08, 6.5, 0.08]} />
+        <meshStandardMaterial color="#8898aa" metalness={0.4} roughness={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
+function LabCabinets() {
+  return (
+    <group position={[8.5, -1.1, -2]}>
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[0.26, 4.2, 5.2]} />
+        <meshStandardMaterial color="#b4c6d6" roughness={0.6} />
+      </mesh>
+      {/* door lines */}
+      {[-1.3, 0, 1.3].map((z) => (
+        <mesh key={z} position={[-0.14, 0, z]}>
+          <boxGeometry args={[0.03, 3.9, 0.03]} />
+          <meshStandardMaterial color="#8898aa" />
+        </mesh>
+      ))}
+      {/* door handles */}
+      {[-1.3, 0, 1.3].map((z) => (
+        <mesh key={`h${z}`} position={[-0.15, 0.2, z + 0.4]} castShadow>
+          <boxGeometry args={[0.04, 0.08, 0.35]} />
+          <meshStandardMaterial
+            color="#9aaab8"
+            metalness={0.5}
+            roughness={0.3}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+function LabSink() {
+  return (
+    <group position={[4.8, -0.14, -6.6]}>
+      {/* sink basin */}
+      <mesh receiveShadow castShadow>
+        <boxGeometry args={[1.6, 0.14, 1.1]} />
+        <meshStandardMaterial
+          color="#c0d0de"
+          roughness={0.25}
+          metalness={0.18}
+        />
+      </mesh>
+      <mesh position={[0, -0.22, 0]} receiveShadow>
+        <boxGeometry args={[1.4, 0.28, 0.9]} />
+        <meshStandardMaterial color="#aabccc" roughness={0.3} metalness={0.2} />
+      </mesh>
+      {/* tap */}
+      <mesh position={[0, 0.32, -0.4]} castShadow>
+        <cylinderGeometry args={[0.04, 0.04, 0.6, 16]} />
+        <meshStandardMaterial
+          color="#9aacba"
+          metalness={0.65}
+          roughness={0.25}
+        />
+      </mesh>
+      <mesh
+        position={[0, 0.55, -0.18]}
+        rotation={[Math.PI / 2.4, 0, 0]}
+        castShadow
+      >
+        <cylinderGeometry args={[0.028, 0.028, 0.38, 14]} />
+        <meshStandardMaterial
+          color="#9aacba"
+          metalness={0.65}
+          roughness={0.25}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function LabSafetyPosters() {
+  const posters = [
+    { x: -6, z: -6.89, color: "#ffd6d6", label: "⚠ Safety First" },
+    { x: 0, z: -6.89, color: "#d6f5ff", label: "🧪 Handle with Care" },
+    { x: 6, z: -6.89, color: "#d6ffd9", label: "♻ Dispose Safely" },
+  ];
+  return (
+    <>
+      {posters.map(({ x, z, color, label }) => (
+        <group key={x} position={[x, 2.2, z]}>
+          <mesh receiveShadow>
+            <planeGeometry args={[1.55, 1.05]} />
+            <meshStandardMaterial color={color} roughness={0.8} />
+          </mesh>
+          <Html center distanceFactor={10} position={[0, 0, 0.01]}>
+            <div className="poster-label">{label}</div>
+          </Html>
+        </group>
+      ))}
+    </>
+  );
+}
+
+function CeilingLampFixture({ position }) {
+  return (
+    <group position={position}>
+      {/* housing */}
+      <mesh castShadow>
+        <boxGeometry args={[1.4, 0.12, 0.38]} />
+        <meshStandardMaterial
+          color="#ccd6e0"
+          roughness={0.55}
+          metalness={0.25}
+        />
+      </mesh>
+      {/* emissive panel */}
+      <mesh position={[0, -0.07, 0]}>
+        <planeGeometry args={[1.28, 0.3]} />
+        <meshStandardMaterial
+          color="#fff9ee"
+          emissive="#fff5dd"
+          emissiveIntensity={1.8}
+          roughness={0.9}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+// ─── LIGHTS ──────────────────────────────────────────────────────────────────
+function LabLights() {
+  return (
+    <>
+      {/* Soft overall fill */}
+      <ambientLight intensity={0.38} color="#f0f6ff" />
+
+      {/* Main ceiling key light */}
+      <directionalLight
+        position={[2, 9, 4]}
+        intensity={1.05}
+        color="#fff8f0"
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-near={0.5}
+        shadow-camera-far={30}
+        shadow-camera-left={-9}
+        shadow-camera-right={9}
+        shadow-camera-top={9}
+        shadow-camera-bottom={-9}
+        shadow-bias={-0.0008}
+      />
+
+      {/* Ceiling fluorescent strips (match fixture positions) */}
+      <pointLight
+        position={[-3, 4.7, -1]}
+        intensity={1.1}
+        distance={10}
+        color="#fffaea"
+      />
+      <pointLight
+        position={[3, 4.7, -1]}
+        intensity={1.1}
+        distance={10}
+        color="#fffaea"
+      />
+      <pointLight
+        position={[0, 4.7, 2.5]}
+        intensity={1.0}
+        distance={10}
+        color="#fffaea"
+      />
+
+      {/* Cool rim from window side */}
+      <pointLight
+        position={[8, 1.5, 0]}
+        intensity={0.55}
+        distance={14}
+        color="#c8e8ff"
+      />
+
+      {/* Warm under-bench bounce */}
+      <pointLight
+        position={[0, -1.8, 1.5]}
+        intensity={0.18}
+        distance={8}
+        color="#ffd8a8"
+      />
+    </>
+  );
+}
+
+// ─── BENCH COLLIDER ───────────────────────────────────────────────────────────
 function WorkbenchCollider() {
   return (
     <RigidBody type="fixed" colliders={false}>
-      <CuboidCollider args={[4.8, 0.2, 3.1]} position={[0, -0.05, 0]} />
+      <CuboidCollider
+        args={[5.1, 0.1, 2.9]}
+        position={[0, BENCH_TOP - 0.06, 0]}
+      />
     </RigidBody>
   );
 }
@@ -778,27 +1147,71 @@ function SnapGuides({ sceneId, expectedEquipmentId, placedComponents }) {
 function FocusRig({ focusPoint }) {
   const controlsRef = useRef();
   const { camera } = useThree();
-  const desiredOffset = useMemo(() => new THREE.Vector3(5.5, 3.4, 5.5), []);
+  // Track current gsap tween so we can kill it on new focus
+  const tweenRef = useRef(null);
+  const prevFocus = useRef(null);
 
-  useFrame((_, delta) => {
+  useEffect(() => {
     if (!controlsRef.current) return;
-    const target = new THREE.Vector3(...focusPoint);
-    const blend = 1 - Math.exp(-delta * 2.8);
-    controlsRef.current.target.lerp(target, blend);
+    const [fx, fy, fz] = focusPoint;
+    // Don't re-tween if focus hasn't changed
+    if (
+      prevFocus.current &&
+      prevFocus.current[0] === fx &&
+      prevFocus.current[1] === fy &&
+      prevFocus.current[2] === fz
+    )
+      return;
+    prevFocus.current = focusPoint;
 
-    const goal = target.clone().add(desiredOffset);
-    camera.position.lerp(goal, blend * 0.5);
-    controlsRef.current.update();
-  });
+    if (tweenRef.current) tweenRef.current.kill();
+
+    const ctrl = controlsRef.current;
+    const camOffset = { x: fx + 5.5, y: fy + 3.4, z: fz + 5.5 };
+
+    tweenRef.current = gsap.to(
+      {
+        tx: ctrl.target.x,
+        ty: ctrl.target.y,
+        tz: ctrl.target.z,
+        cx: camera.position.x,
+        cy: camera.position.y,
+        cz: camera.position.z,
+      },
+      {
+        tx: fx,
+        ty: fy,
+        tz: fz,
+        cx: camOffset.x,
+        cy: camOffset.y,
+        cz: camOffset.z,
+        duration: 1.1,
+        ease: "power2.inOut",
+        onUpdate: function () {
+          ctrl.target.set(
+            this.targets()[0].tx,
+            this.targets()[0].ty,
+            this.targets()[0].tz,
+          );
+          camera.position.set(
+            this.targets()[0].cx,
+            this.targets()[0].cy,
+            this.targets()[0].cz,
+          );
+          ctrl.update();
+        },
+      },
+    );
+  }, [focusPoint, camera]);
 
   return (
     <OrbitControls
       ref={controlsRef}
       enablePan
       enableZoom
-      minDistance={5.5}
-      maxDistance={14}
-      maxPolarAngle={Math.PI / 2.05}
+      minDistance={4.5}
+      maxDistance={16}
+      maxPolarAngle={Math.PI / 2.08}
       makeDefault
     />
   );
@@ -1030,36 +1443,91 @@ function RoundBottomFlask({ highlighted, liquidLevel, liquidColor }) {
 }
 
 function BunsenBurnerModel({ active }) {
+  const outerFlameRef = useRef();
+  const innerFlameRef = useRef();
+  const flameLightRef = useRef();
+
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (outerFlameRef.current) {
+      outerFlameRef.current.scale.y = 1 + Math.sin(t * 14) * 0.12;
+      outerFlameRef.current.scale.x = 1 + Math.cos(t * 9) * 0.07;
+      outerFlameRef.current.position.y = 0.58 + Math.sin(t * 11) * 0.025;
+    }
+    if (innerFlameRef.current) {
+      innerFlameRef.current.scale.y = 1 + Math.cos(t * 17) * 0.14;
+      innerFlameRef.current.scale.x = 1 + Math.sin(t * 8) * 0.06;
+    }
+    if (flameLightRef.current) {
+      flameLightRef.current.intensity = active
+        ? 1.2 + Math.sin(t * 13) * 0.35
+        : 0;
+    }
+  });
+
   return (
     <group>
-      <mesh position={[0, -0.2, 0]} castShadow>
-        <cylinderGeometry args={[0.44, 0.5, 0.24, 32]} />
+      {/* Base plate */}
+      <mesh position={[0, -0.22, 0]} castShadow>
+        <cylinderGeometry args={[0.48, 0.52, 0.22, 32]} />
         <meshStandardMaterial
-          color="#7f8fa0"
-          roughness={0.65}
-          metalness={0.22}
+          color="#6e7f90"
+          roughness={0.62}
+          metalness={0.25}
         />
       </mesh>
-      <mesh position={[0, 0.15, 0]} castShadow>
-        <cylinderGeometry args={[0.11, 0.13, 0.44, 26]} />
+      {/* Air-hole collar */}
+      <mesh position={[0, -0.04, 0]} castShadow>
+        <cylinderGeometry args={[0.135, 0.14, 0.12, 28]} />
         <meshStandardMaterial
-          color="#a9b4c2"
+          color="#8898a8"
           roughness={0.55}
           metalness={0.3}
         />
       </mesh>
+      {/* Barrel */}
+      <mesh position={[0, 0.17, 0]} castShadow>
+        <cylinderGeometry args={[0.1, 0.135, 0.52, 26]} />
+        <meshStandardMaterial
+          color="#a4b3c2"
+          roughness={0.5}
+          metalness={0.32}
+        />
+      </mesh>
+      {/* Outer flame */}
       {active && (
-        <mesh position={[0, 0.57, 0]} castShadow>
-          <coneGeometry args={[0.16, 0.52, 26]} />
+        <mesh ref={outerFlameRef} position={[0, 0.58, 0]}>
+          <coneGeometry args={[0.18, 0.62, 28]} />
           <meshStandardMaterial
-            emissive="#ff9b36"
-            emissiveIntensity={1.1}
-            color="#ffcf6e"
+            color="#ff8c1a"
+            emissive="#ff6a00"
+            emissiveIntensity={1.4}
             transparent
-            opacity={0.9}
+            opacity={0.82}
           />
         </mesh>
       )}
+      {/* Inner blue cone */}
+      {active && (
+        <mesh ref={innerFlameRef} position={[0, 0.54, 0]}>
+          <coneGeometry args={[0.08, 0.32, 20]} />
+          <meshStandardMaterial
+            color="#66d9ff"
+            emissive="#33bbff"
+            emissiveIntensity={1.6}
+            transparent
+            opacity={0.72}
+          />
+        </mesh>
+      )}
+      {/* Dynamic point light from flame */}
+      <pointLight
+        ref={flameLightRef}
+        position={[0, 0.9, 0]}
+        intensity={active ? 1.2 : 0}
+        distance={3.5}
+        color="#ff9b36"
+      />
     </group>
   );
 }
