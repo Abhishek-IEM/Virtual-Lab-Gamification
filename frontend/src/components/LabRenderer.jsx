@@ -8,9 +8,9 @@ function InitialCameraPose() {
   const { camera } = useThree();
 
   useEffect(() => {
-    camera.position.set(0, 4, 10);
+    camera.position.set(0, 5, 11);
     camera.lookAt(0, 0, 0);
-    camera.fov = 70;
+    camera.fov = 65;
     camera.updateProjectionMatrix();
   }, [camera]);
 
@@ -120,116 +120,127 @@ function RebuiltLabScene({ onAction }) {
   const flaskProfile = useMemo(
     () => [
       new THREE.Vector2(0, 0),
-      new THREE.Vector2(0.7, 0),
-      new THREE.Vector2(0.8, 0.5),
-      new THREE.Vector2(0.9, 1.2),
-      new THREE.Vector2(0.6, 1.8),
-      new THREE.Vector2(0.2, 2.2),
-      new THREE.Vector2(0.25, 2.6),
+      new THREE.Vector2(0.6, 0),
+      new THREE.Vector2(0.8, 0.4),
+      new THREE.Vector2(0.9, 1.0),
+      new THREE.Vector2(0.7, 1.6),
+      new THREE.Vector2(0.25, 2.0),
+      new THREE.Vector2(0.28, 2.4),
     ],
     [],
   );
 
   return (
     <group>
-      <mesh position={[0, -1, 0]} receiveShadow>
+      <mesh position={[0, -1.2, 0]} receiveShadow>
         <boxGeometry args={[12, 0.3, 6]} />
-        <meshStandardMaterial color={0x1a3a2a} roughness={0.7} />
+        <meshStandardMaterial color={0x2a5a3a} roughness={0.8} />
       </mesh>
 
-      <mesh position={[-3.5, 0.3, 0]} castShadow>
-        <cylinderGeometry args={[0.9, 0.8, 2.5, 32]} />
+      <mesh position={[-3.2, -0.2, 0.5]} castShadow>
+        <cylinderGeometry args={[0.7, 0.6, 2.0, 32]} />
         <meshStandardMaterial
           color={0x4488bb}
           transparent
           opacity={0.75}
-          roughness={0.3}
-          metalness={0.1}
+          roughness={0.1}
+          metalness={0.2}
         />
       </mesh>
 
-      <mesh position={[-3.5, -0.1, 0]}>
-        <cylinderGeometry args={[0.68, 0.62, 1.2, 28]} />
-        <meshStandardMaterial color={0xff9999} transparent opacity={0.8} />
-      </mesh>
-
-      <mesh position={[-3.5, 1.6, 0]}>
-        <cylinderGeometry args={[0.95, 0.95, 0.15, 32]} />
+      <mesh position={[-3.2, 0.85, 0.5]}>
+        <cylinderGeometry args={[0.72, 0.72, 0.1, 32]} />
         <meshStandardMaterial color={0xffffff} />
       </mesh>
 
-      <mesh position={[3.5, 0.3, 0]} castShadow>
-        <cylinderGeometry args={[0.9, 0.8, 2.5, 32]} />
+      <mesh position={[-3.2, -0.55, 0.5]}>
+        <cylinderGeometry args={[0.58, 0.52, 0.8, 32]} />
+        <meshStandardMaterial
+          color={0xff6666}
+          transparent
+          opacity={0.85}
+          roughness={0.16}
+          metalness={0.12}
+        />
+      </mesh>
+
+      <mesh position={[3.2, -0.2, 0.5]} castShadow>
+        <cylinderGeometry args={[0.7, 0.6, 2.0, 32]} />
         <meshStandardMaterial
           color={0x4488bb}
           transparent
           opacity={0.75}
-          roughness={0.3}
-          metalness={0.1}
+          roughness={0.1}
+          metalness={0.2}
         />
       </mesh>
 
-      <mesh position={[3.5, -0.1, 0]}>
-        <cylinderGeometry args={[0.68, 0.62, 1.2, 28]} />
-        <meshStandardMaterial color={0x99ccff} transparent opacity={0.8} />
-      </mesh>
-
-      <mesh position={[3.5, 1.6, 0]}>
-        <cylinderGeometry args={[0.95, 0.95, 0.15, 32]} />
+      <mesh position={[3.2, 0.85, 0.5]}>
+        <cylinderGeometry args={[0.72, 0.72, 0.1, 32]} />
         <meshStandardMaterial color={0xffffff} />
       </mesh>
 
-      <mesh position={[0, 2, -0.5]}>
-        <cylinderGeometry args={[0.06, 0.06, 6, 16]} />
+      <mesh position={[3.2, -0.55, 0.5]}>
+        <cylinderGeometry args={[0.58, 0.52, 0.8, 32]} />
         <meshStandardMaterial
-          color={0xcccccc}
-          metalness={0.8}
-          roughness={0.25}
-        />
-      </mesh>
-
-      <mesh position={[0, -0.9, -0.5]}>
-        <boxGeometry args={[1.5, 0.15, 0.8]} />
-        <meshStandardMaterial
-          color={0x999999}
-          metalness={0.8}
-          roughness={0.25}
-        />
-      </mesh>
-
-      <mesh position={[0, 2.5, -0.5]}>
-        <boxGeometry args={[1.2, 0.08, 0.08]} />
-        <meshStandardMaterial color={0xaaaaaa} />
-      </mesh>
-
-      <mesh position={[0, 0.8, -0.5]}>
-        <cylinderGeometry args={[0.04, 0.04, 3.5, 16]} />
-        <meshPhysicalMaterial
-          color={0xddddff}
+          color={0x6666ff}
           transparent
-          opacity={0.6}
-          metalness={0.3}
+          opacity={0.85}
+          roughness={0.16}
+          metalness={0.12}
         />
       </mesh>
 
-      <mesh position={[0, -0.5, 0.8]} onClick={onAction}>
+      <mesh position={[0, -1.1, -0.5]}>
+        <boxGeometry args={[1.8, 0.15, 1.0]} />
+        <meshStandardMaterial color={0x888888} metalness={0.8} />
+      </mesh>
+
+      <mesh position={[0, 1.9, -0.5]}>
+        <cylinderGeometry args={[0.05, 0.05, 6, 16]} />
+        <meshStandardMaterial color={0xaaaaaa} metalness={0.9} />
+      </mesh>
+
+      <mesh position={[0, 2.8, -0.5]}>
+        <boxGeometry args={[1.0, 0.08, 0.08]} />
+        <meshStandardMaterial color={0x888888} metalness={0.8} />
+      </mesh>
+
+      <mesh position={[0, 1.0, -0.5]}>
+        <cylinderGeometry args={[0.035, 0.035, 3.5, 16]} />
+        <meshStandardMaterial
+          color={0xaaddff}
+          transparent
+          opacity={0.7}
+          roughness={0.08}
+          metalness={0.24}
+        />
+      </mesh>
+
+      <mesh position={[0, -1.0, 0.8]} onClick={onAction}>
         <latheGeometry args={[flaskProfile, 48]} />
         <meshStandardMaterial
-          color={0x4488bb}
+          color={0x88ccff}
           transparent
-          opacity={0.75}
-          roughness={0.3}
+          opacity={0.65}
+          roughness={0.07}
+          metalness={0.22}
+        />
+      </mesh>
+
+      <mesh position={[0, -0.85, 0.8]}>
+        <cylinderGeometry args={[0.5, 0.55, 0.6, 32]} />
+        <meshStandardMaterial
+          color={0xccffee}
+          transparent
+          opacity={0.9}
+          roughness={0.18}
           metalness={0.1}
         />
       </mesh>
 
-      <mesh position={[0, -0.6, 0.5]}>
-        <cylinderGeometry args={[0.55, 0.6, 0.8, 32]} />
-        <meshStandardMaterial color={0xccffee} transparent opacity={0.85} />
-      </mesh>
-
-      <mesh position={[-1.5, 0.2, 0.8]} rotation={[0, 0, -0.4]}>
-        <cylinderGeometry args={[0.04, 0.02, 2.5, 8]} />
+      <mesh position={[-1.8, -0.3, 0.8]} rotation={[0, 0, -0.5]}>
+        <cylinderGeometry args={[0.03, 0.015, 2.5, 8]} />
         <meshStandardMaterial color={0xdddddd} />
       </mesh>
     </group>
@@ -302,41 +313,71 @@ export default function LabRenderer({
           <Canvas
             shadows
             dpr={[1, 2]}
-            camera={{ position: [0, 4, 10], fov: 70, near: 0.1, far: 1000 }}
+            camera={{ position: [0, 5, 11], fov: 65, near: 0.1, far: 1000 }}
             gl={{ antialias: true }}
             onCreated={({ gl, camera, scene }) => {
               gl.outputColorSpace = THREE.SRGBColorSpace;
-              gl.setClearColor(0x0d1b2a);
+              gl.setClearColor(0xd3deeb);
               gl.shadowMap.enabled = true;
               gl.shadowMap.type = THREE.PCFSoftShadowMap;
-              scene.background = new THREE.Color(0x0d1b2a);
+              gl.toneMappingExposure = 1.03;
+              scene.background = new THREE.Color(0xd3deeb);
+              scene.scale.set(1.3, 1.3, 1.3);
+              scene.fog = new THREE.FogExp2(0xb9c8da, 0.02);
 
               const container = canvasContainerRef.current;
               if (container) {
                 gl.setSize(container.clientWidth, container.clientHeight);
               }
 
-              camera.position.set(0, 4, 10);
+              camera.position.set(0, 5, 11);
               camera.lookAt(0, 0, 0);
-              camera.fov = 70;
+              camera.fov = 65;
               camera.updateProjectionMatrix();
             }}
           >
             <InitialCameraPose />
             <CanvasResizeSync containerRef={canvasContainerRef} />
 
-            <ambientLight color={0xffffff} intensity={0.6} />
+            <ambientLight color={0xffffff} intensity={0.62} />
+            <hemisphereLight
+              color={0xf7fbff}
+              groundColor={0x8da0b5}
+              intensity={0.35}
+            />
             <directionalLight
               color={0xffffff}
               castShadow
-              intensity={1.5}
-              position={[5, 10, 5]}
+              intensity={1.8}
+              position={[4.8, 10, 6]}
+              shadow-mapSize-width={2048}
+              shadow-mapSize-height={2048}
+              shadow-camera-near={0.5}
+              shadow-camera-far={25}
+              shadow-camera-left={-8}
+              shadow-camera-right={8}
+              shadow-camera-top={8}
+              shadow-camera-bottom={-8}
+              shadow-bias={-0.0002}
+              shadow-normalBias={0.02}
             />
-            <pointLight color={0x4fc3f7} intensity={1.2} position={[0, 4, 3]} />
             <pointLight
               color={0xffffff}
-              intensity={0.8}
-              position={[-4, 3, 2]}
+              castShadow
+              intensity={1.35}
+              position={[0, 5, 0.3]}
+              distance={14}
+              decay={2}
+              shadow-mapSize-width={1024}
+              shadow-mapSize-height={1024}
+              shadow-bias={-0.00015}
+            />
+            <pointLight
+              color={0xdfe9f7}
+              intensity={0.55}
+              position={[-5.5, 3.2, 2.2]}
+              distance={18}
+              decay={2}
             />
 
             <RebuiltLabScene onAction={() => onAction?.(expectedStepId)} />
