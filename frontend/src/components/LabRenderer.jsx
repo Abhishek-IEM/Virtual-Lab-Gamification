@@ -7,7 +7,6 @@ import {
   CSS2DRenderer,
 } from "three/examples/jsm/renderers/CSS2DRenderer.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
-import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 import "./LabRenderer.css";
 
 function getChemState(experimentId, completedSteps) {
@@ -113,8 +112,6 @@ function RendererConfig({ containerRef }) {
   const { scene, gl, camera } = useThree();
 
   useEffect(() => {
-    RectAreaLightUniformsLib.init();
-
     gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     gl.shadowMap.enabled = true;
     gl.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -366,7 +363,332 @@ function PrecipitateParticles({ active, cloudinessRef }) {
   );
 }
 
-function LabScene({ onAction, pourSignal, chem }) {
+function createGlassMaterial() {
+  return new THREE.MeshPhysicalMaterial({
+    color: 0xf4f7fa,
+    transparent: true,
+    transmission: 1,
+    roughness: 0.05,
+    metalness: 0,
+    thickness: 0.5,
+    envMapIntensity: 1,
+    ior: 1.5,
+    opacity: 0.95,
+    side: THREE.DoubleSide,
+  });
+}
+
+function createStand({ glassMaterial, buretteMarkingHeights, axisX, axisZ }) {
+  return (
+    <group position={[axisX, 0, axisZ]}>
+      {/* Stand base, rod, clamp and burette are aligned to local X=0, Z=0 */}
+      <mesh
+        position={[0, 0.05, 0]}
+        castShadow
+        userData={{ name: "Burette Stand" }}
+      >
+        <cylinderGeometry args={[0.12, 0.12, 0.02, 40]} />
+        <meshStandardMaterial
+          color={0x3a3f45}
+          metalness={0.7}
+          roughness={0.42}
+        />
+      </mesh>
+
+      <mesh position={[0, 1.03, 0]} castShadow userData={{ name: "Stand Rod" }}>
+        <cylinderGeometry args={[0.008, 0.008, 1.96, 18]} />
+        <meshStandardMaterial
+          color={0x494f57}
+          metalness={0.82}
+          roughness={0.25}
+        />
+      </mesh>
+
+      <mesh position={[0, 1.55, 0]} castShadow userData={{ name: "Clamp" }}>
+        <cylinderGeometry args={[0.02, 0.02, 0.02, 24]} />
+        <meshStandardMaterial
+          color={0x676e77}
+          metalness={0.92}
+          roughness={0.16}
+        />
+      </mesh>
+      <mesh position={[0, 1.55, 0]} castShadow userData={{ name: "Clamp" }}>
+        <boxGeometry args={[0.05, 0.012, 0.02]} />
+        <meshStandardMaterial
+          color={0x6e7781}
+          metalness={0.9}
+          roughness={0.2}
+        />
+      </mesh>
+
+      <mesh position={[0, 1.55, 0]} castShadow userData={{ name: "Burette" }}>
+        <cylinderGeometry args={[0.012, 0.012, 1.0, 28, 1, true]} />
+        <primitive object={glassMaterial} attach="material" />
+      </mesh>
+      <mesh position={[0, 1.67, 0]} userData={{ name: "Burette" }}>
+        <cylinderGeometry args={[0.009, 0.009, 0.76, 28]} />
+        <meshPhysicalMaterial
+          color={0xd8e7f1}
+          transmission={0.55}
+          transparent
+          opacity={0.72}
+          roughness={0.05}
+          ior={1.33}
+        />
+      </mesh>
+      {buretteMarkingHeights.map((y, i) => (
+        <mesh
+          key={`burette-mark-${i}`}
+          position={[0.014, 1.55 + y * 0.5, 0]}
+          userData={{ name: "Burette" }}
+        >
+          <boxGeometry args={[0.012, 0.0026, 0.002]} />
+          <meshStandardMaterial color={0xd7dfe7} roughness={0.38} />
+        </mesh>
+      ))}
+
+      <mesh position={[0, 1.14, 0]} castShadow userData={{ name: "Burette" }}>
+        <boxGeometry args={[0.08, 0.018, 0.018]} />
+        <meshStandardMaterial
+          color={0xc8cfd7}
+          metalness={0.62}
+          roughness={0.3}
+        />
+      </mesh>
+      <mesh position={[0, 1.09, 0]} castShadow userData={{ name: "Burette" }}>
+        <coneGeometry args={[0.0046, 0.16, 18]} />
+        <meshStandardMaterial
+          color={0xcfd6dc}
+          metalness={0.34}
+          roughness={0.32}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function createCupboard({ glassMaterial }) {
+  const bottleRows = [0.18, 0.63, 1.07];
+  const xOffset = [-2.68, -2.5, -2.32, -2.14];
+  const colors = [0x9ec7ff, 0xffef99, 0xdde6f2, 0xc8f2d0];
+
+  return (
+    <group position={[0, 0, 0]}>
+      <mesh position={[-2.45, 0.82, -1.35]} castShadow>
+        <boxGeometry args={[0.92, 1.56, 0.42]} />
+        <meshStandardMaterial
+          color={0x5a4638}
+          roughness={0.72}
+          metalness={0.1}
+        />
+      </mesh>
+
+      <mesh position={[-2.45, 0.12, -1.14]} castShadow>
+        <boxGeometry args={[0.8, 0.03, 0.28]} />
+        <meshStandardMaterial color={0x6a5342} roughness={0.76} />
+      </mesh>
+      <mesh position={[-2.45, 0.57, -1.14]} castShadow>
+        <boxGeometry args={[0.8, 0.03, 0.28]} />
+        <meshStandardMaterial color={0x6a5342} roughness={0.76} />
+      </mesh>
+      <mesh position={[-2.45, 1.01, -1.14]} castShadow>
+        <boxGeometry args={[0.8, 0.03, 0.28]} />
+        <meshStandardMaterial color={0x6a5342} roughness={0.76} />
+      </mesh>
+
+      {bottleRows.flatMap((y, shelfIndex) =>
+        xOffset.map((x, bottleIndex) => {
+          const color = colors[(shelfIndex + bottleIndex) % colors.length];
+          const bottleName =
+            shelfIndex === 0 && bottleIndex === 0
+              ? "Hydrochloric Acid (HCl)"
+              : shelfIndex === 0 && bottleIndex === 1
+                ? "Sodium Hydroxide (NaOH)"
+                : shelfIndex === 0 && bottleIndex === 2
+                  ? "Silver Nitrate (AgNO3)"
+                  : "Chemical Bottle";
+
+          return (
+            <group
+              key={`cupboard-bottle-${shelfIndex}-${bottleIndex}`}
+              position={[x, y + 0.08, -1.14]}
+            >
+              <mesh castShadow userData={{ name: bottleName }}>
+                <cylinderGeometry args={[0.026, 0.026, 0.14, 20]} />
+                <primitive object={glassMaterial} attach="material" />
+              </mesh>
+              <mesh position={[0, -0.005, 0]} userData={{ name: bottleName }}>
+                <cylinderGeometry args={[0.021, 0.021, 0.1, 20]} />
+                <meshPhysicalMaterial
+                  color={color}
+                  transmission={0.55}
+                  roughness={0.06}
+                  transparent
+                  opacity={0.78}
+                  ior={1.33}
+                />
+              </mesh>
+              <mesh
+                position={[0, 0.09, 0]}
+                castShadow
+                userData={{ name: bottleName }}
+              >
+                <sphereGeometry args={[0.014, 18, 18]} />
+                <meshStandardMaterial
+                  color={0x9ca6b2}
+                  metalness={0.58}
+                  roughness={0.35}
+                />
+              </mesh>
+              <mesh position={[0, 0.03, 0.027]} userData={{ name: bottleName }}>
+                <boxGeometry args={[0.03, 0.016, 0.002]} />
+                <meshStandardMaterial color={0xf4f2e8} roughness={0.75} />
+              </mesh>
+            </group>
+          );
+        }),
+      )}
+    </group>
+  );
+}
+
+function createPipette({ position, rotation }) {
+  return (
+    <group
+      position={position}
+      rotation={rotation}
+      userData={{ name: "Pipette" }}
+    >
+      {/* Pivot at the top for natural rotation/placement adjustments. */}
+      <mesh position={[0, -0.52, 0]} castShadow userData={{ name: "Pipette" }}>
+        <cylinderGeometry args={[0.008, 0.0085, 1.04, 28]} />
+        <meshPhysicalMaterial
+          color={0xf3f7fb}
+          transparent
+          transmission={1}
+          roughness={0.05}
+          metalness={0}
+          thickness={0.3}
+          envMapIntensity={1}
+          ior={1.5}
+          opacity={0.92}
+        />
+      </mesh>
+
+      <mesh position={[0, -1.09, 0]} castShadow userData={{ name: "Pipette" }}>
+        <coneGeometry args={[0.0042, 0.18, 28]} />
+        <meshPhysicalMaterial
+          color={0xf3f7fb}
+          transparent
+          transmission={1}
+          roughness={0.05}
+          metalness={0}
+          thickness={0.3}
+          envMapIntensity={1}
+          ior={1.5}
+          opacity={0.92}
+        />
+      </mesh>
+
+      {/* Tiny collar creates a smoother transition from body to tip. */}
+      <mesh position={[0, -1.0, 0]} castShadow userData={{ name: "Pipette" }}>
+        <cylinderGeometry args={[0.0058, 0.0048, 0.024, 24]} />
+        <meshPhysicalMaterial
+          color={0xf3f7fb}
+          transparent
+          transmission={1}
+          roughness={0.05}
+          metalness={0}
+          thickness={0.3}
+          envMapIntensity={1}
+          ior={1.5}
+          opacity={0.92}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function HoverRaycaster({ sceneRootRef, onHoverChange, onMouseMove }) {
+  const { camera, gl } = useThree();
+  const raycasterRef = useRef(new THREE.Raycaster());
+  const pointerRef = useRef(new THREE.Vector2(2, 2));
+  const lastHoverRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = gl.domElement;
+
+    const handleMove = (event) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width;
+      const y = (event.clientY - rect.top) / rect.height;
+      pointerRef.current.set(x * 2 - 1, -(y * 2 - 1));
+      onMouseMove({ x: event.clientX, y: event.clientY });
+    };
+
+    const handleLeave = () => {
+      pointerRef.current.set(2, 2);
+      onHoverChange(null);
+    };
+
+    canvas.addEventListener("mousemove", handleMove);
+    canvas.addEventListener("mouseleave", handleLeave);
+
+    return () => {
+      canvas.removeEventListener("mousemove", handleMove);
+      canvas.removeEventListener("mouseleave", handleLeave);
+    };
+  }, [gl, onHoverChange, onMouseMove]);
+
+  useFrame(() => {
+    if (!sceneRootRef.current) return;
+
+    raycasterRef.current.setFromCamera(pointerRef.current, camera);
+    const intersects = raycasterRef.current.intersectObjects(
+      sceneRootRef.current.children,
+      true,
+    );
+
+    const hit = intersects.find((it) => it.object?.userData?.name);
+    const nextName = hit ? hit.object.userData.name : null;
+
+    if (lastHoverRef.current !== nextName) {
+      lastHoverRef.current = nextName;
+      onHoverChange(nextName);
+    }
+  });
+
+  return null;
+}
+
+function HoverTooltipOverlay({ hoverName, mousePosition }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: mousePosition.x + 14,
+        top: mousePosition.y - 12,
+        padding: "4px 8px",
+        borderRadius: 8,
+        fontSize: 12,
+        color: "#f3f6fa",
+        background: "rgba(15, 18, 24, 0.9)",
+        border: "1px solid rgba(210, 220, 232, 0.2)",
+        boxShadow: "0 4px 14px rgba(0, 0, 0, 0.35)",
+        pointerEvents: "none",
+        zIndex: 20,
+        whiteSpace: "nowrap",
+        opacity: hoverName ? 1 : 0,
+        transform: hoverName ? "translateY(0)" : "translateY(4px)",
+        transition: "opacity 140ms ease, transform 140ms ease",
+      }}
+    >
+      {hoverName || ""}
+    </div>
+  );
+}
+
+function LabScene({ onAction, pourSignal, chem, sceneRootRef }) {
   const agNo3LiquidRef = useRef(null);
   const reactionLiquidRef = useRef(null);
   const streamRef = useRef(null);
@@ -377,6 +699,12 @@ function LabScene({ onAction, pourSignal, chem }) {
   const transferRatioRef = useRef(0);
   const cloudinessRef = useRef(0);
   const reactionFlashRef = useRef(0);
+  const titrationAxisX = 0;
+  const titrationAxisZ = 0;
+  const buretteAxisX = 0.42;
+  const buretteAxisZ = 0;
+  const pipettePosition = [titrationAxisX, 1.4, titrationAxisZ];
+  const pipetteRotation = [0, 0, 0];
 
   const concreteWall = useMemo(
     () =>
@@ -393,27 +721,7 @@ function LabScene({ onAction, pourSignal, chem }) {
     [],
   );
 
-  const glassMaterial = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: 0xf4f6f8,
-        metalness: 0,
-        roughness: 0.04,
-        transmission: 0.95,
-        thickness: 1.05,
-        ior: 1.5,
-        transparent: true,
-        opacity: 0.94,
-        side: THREE.DoubleSide,
-        envMapIntensity: 1.08,
-        reflectivity: 0.55,
-        clearcoat: 1,
-        clearcoatRoughness: 0.08,
-        attenuationColor: new THREE.Color(0xe4e7ea),
-        attenuationDistance: 1.05,
-      }),
-    [],
-  );
+  const glassMaterial = useMemo(() => createGlassMaterial(), []);
 
   const markingHeights = useMemo(() => [-0.26, -0.14, -0.02, 0.1, 0.22], []);
 
@@ -486,7 +794,7 @@ function LabScene({ onAction, pourSignal, chem }) {
       reactionLiquidRef.current.scale.y =
         0.62 + transferRatioRef.current * 0.33;
       reactionLiquidRef.current.position.y =
-        -0.18 + transferRatioRef.current * 0.17;
+        0.17 + transferRatioRef.current * 0.12;
       reactionLiquidRef.current.material.color.setStyle(
         transferRatioRef.current > 0.55
           ? `rgb(${214 + cloudinessRef.current * 10}, ${224 + cloudinessRef.current * 8}, ${236 + cloudinessRef.current * 6})`
@@ -514,7 +822,7 @@ function LabScene({ onAction, pourSignal, chem }) {
   });
 
   return (
-    <group>
+    <group ref={sceneRootRef}>
       {/* Floor */}
       <mesh
         position={[0, -1.64, 0]}
@@ -575,19 +883,23 @@ function LabScene({ onAction, pourSignal, chem }) {
       </mesh>
 
       {/* Beakers */}
-      <group position={[-1.2, 0.39, 0.1]}>
-        <mesh castShadow>
+      <group position={[-1.22, 0.39, 0.1]}>
+        <mesh castShadow userData={{ name: "Beaker" }}>
           <cylinderGeometry args={[0.22, 0.19, 0.7, 48, 1, true]} />
           <primitive object={glassMaterial} attach="material" />
         </mesh>
-        <mesh position={[0, -0.35, 0]}>
+        <mesh position={[0, -0.35, 0]} userData={{ name: "Beaker" }}>
           <circleGeometry args={[0.19, 48]} />
           <primitive object={glassMaterial} attach="material" />
         </mesh>
-        <mesh ref={agNo3LiquidRef} position={[0, -0.35 + 0.125, 0]}>
+        <mesh
+          ref={agNo3LiquidRef}
+          position={[0, -0.35 + 0.125, 0]}
+          userData={{ name: "Hydrochloric Acid (HCl)" }}
+        >
           <cylinderGeometry args={[0.17, 0.17, 0.25, 48]} />
           <meshPhysicalMaterial
-            color={0x6da4d6}
+            color={0xcfe1f2}
             transmission={0.55}
             roughness={0.06}
             transparent
@@ -596,10 +908,14 @@ function LabScene({ onAction, pourSignal, chem }) {
             thickness={0.3}
           />
         </mesh>
-        <mesh position={[0, -0.225, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh
+          position={[0, -0.225, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          userData={{ name: "Hydrochloric Acid (HCl)" }}
+        >
           <circleGeometry args={[0.168, 40]} />
           <meshPhysicalMaterial
-            color={0x7aaede}
+            color={0xd5e7f7}
             transmission={0.45}
             roughness={0.05}
             transparent
@@ -615,19 +931,22 @@ function LabScene({ onAction, pourSignal, chem }) {
         ))}
       </group>
 
-      <group position={[1.2, 0.39, 0.1]}>
-        <mesh castShadow>
+      <group position={[1.22, 0.39, 0.1]}>
+        <mesh castShadow userData={{ name: "Beaker" }}>
           <cylinderGeometry args={[0.22, 0.19, 0.7, 48, 1, true]} />
           <primitive object={glassMaterial} attach="material" />
         </mesh>
-        <mesh position={[0, -0.35, 0]}>
+        <mesh position={[0, -0.35, 0]} userData={{ name: "Beaker" }}>
           <circleGeometry args={[0.19, 48]} />
           <primitive object={glassMaterial} attach="material" />
         </mesh>
-        <mesh position={[0, -0.35 + 0.1, 0]}>
+        <mesh
+          position={[0, -0.35 + 0.1, 0]}
+          userData={{ name: "Sodium Hydroxide (NaOH)" }}
+        >
           <cylinderGeometry args={[0.17, 0.17, 0.2, 48]} />
           <meshPhysicalMaterial
-            color={0xa8d1b0}
+            color={0xd9efe0}
             transmission={0.55}
             roughness={0.06}
             transparent
@@ -636,10 +955,14 @@ function LabScene({ onAction, pourSignal, chem }) {
             thickness={0.3}
           />
         </mesh>
-        <mesh position={[0, -0.25, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh
+          position={[0, -0.25, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          userData={{ name: "Sodium Hydroxide (NaOH)" }}
+        >
           <circleGeometry args={[0.168, 40]} />
           <meshPhysicalMaterial
-            color={0xb7ddbe}
+            color={0xe2f4e7}
             transmission={0.45}
             roughness={0.05}
             transparent
@@ -655,11 +978,19 @@ function LabScene({ onAction, pourSignal, chem }) {
         ))}
       </group>
 
-      <mesh position={[0, 0.54, 0]} castShadow>
+      <mesh
+        position={[titrationAxisX, 0.4, titrationAxisZ]}
+        castShadow
+        userData={{ name: "Conical Flask" }}
+      >
         <latheGeometry args={[flaskProfile, 64]} />
         <primitive object={glassMaterial} attach="material" />
       </mesh>
-      <mesh ref={reactionLiquidRef} position={[0, 0.11, 0]}>
+      <mesh
+        ref={reactionLiquidRef}
+        position={[titrationAxisX, 0.17, titrationAxisZ]}
+        userData={{ name: "Conical Flask" }}
+      >
         <cylinderGeometry args={[0.17, 0.09, 0.18, 48]} />
         <meshPhysicalMaterial
           color={0xdfa6be}
@@ -670,7 +1001,11 @@ function LabScene({ onAction, pourSignal, chem }) {
           ior={1.33}
         />
       </mesh>
-      <mesh position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh
+        position={[titrationAxisX, 0.27, titrationAxisZ]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        userData={{ name: "Conical Flask" }}
+      >
         <circleGeometry args={[0.165, 40]} />
         <meshPhysicalMaterial
           color={0xe9b6cb}
@@ -682,72 +1017,13 @@ function LabScene({ onAction, pourSignal, chem }) {
         />
       </mesh>
 
-      {/* Burette */}
-      <mesh position={[0.8, 1.1, -0.3]}>
-        <cylinderGeometry args={[0.016, 0.016, 2.2, 16]} />
-        <meshStandardMaterial
-          color={0x444444}
-          metalness={0.9}
-          roughness={0.2}
-        />
-      </mesh>
-      <mesh position={[0.8, 1.3, -0.3]} castShadow>
-        <cylinderGeometry args={[0.022, 0.022, 1.8, 32, 1, true]} />
-        <primitive object={glassMaterial} attach="material" />
-      </mesh>
-      <mesh position={[0.8, 1.4, -0.3]}>
-        <cylinderGeometry args={[0.016, 0.016, 1.4, 32]} />
-        <meshPhysicalMaterial
-          color={0xa5cda5}
-          transmission={0.55}
-          transparent={true}
-          opacity={0.7}
-          roughness={0.06}
-          ior={1.33}
-        />
-      </mesh>
-      {buretteMarkingHeights.map((y, i) => (
-        <mesh key={`burette-mark-${i}`} position={[0.824, 1.3 + y, -0.3]}>
-          <boxGeometry args={[0.014, 0.0028, 0.002]} />
-          <meshStandardMaterial color={0xd7dfe7} roughness={0.38} />
-        </mesh>
-      ))}
-      <mesh position={[0.8, 0.42, -0.3]} castShadow>
-        <boxGeometry args={[0.08, 0.018, 0.018]} />
-        <meshStandardMaterial
-          color={0xc7ced4}
-          metalness={0.55}
-          roughness={0.38}
-        />
-      </mesh>
-      <mesh position={[0.86, 0.4, -0.3]} castShadow>
-        <coneGeometry args={[0.007, 0.1, 16]} />
-        <meshStandardMaterial
-          color={0xcfd6dc}
-          metalness={0.34}
-          roughness={0.32}
-        />
-      </mesh>
-      <mesh castShadow position={[0.13, 1.22, 0]}>
-        <boxGeometry args={[0.24, 0.08, 0.12]} />
-        <meshStandardMaterial
-          color={0xd5d9dd}
-          roughness={0.45}
-          metalness={0.82}
-        />
-      </mesh>
-      <mesh position={[0.23, 1.08, 0]} castShadow>
-        <cylinderGeometry args={[0.018, 0.013, 0.52, 20]} />
-        <primitive object={glassMaterial} attach="material" />
-      </mesh>
-      <mesh position={[0.4, 0.63, 0]} castShadow>
-        <cylinderGeometry args={[0.011, 0.008, 0.92, 20]} />
-        <primitive object={glassMaterial} attach="material" />
-      </mesh>
-      <mesh position={[0.4, 0.15, 0]} castShadow>
-        <coneGeometry args={[0.006, 0.12, 18]} />
-        <primitive object={glassMaterial} attach="material" />
-      </mesh>
+      {createStand({
+        glassMaterial,
+        buretteMarkingHeights,
+        axisX: buretteAxisX,
+        axisZ: buretteAxisZ,
+      })}
+      {createPipette({ position: pipettePosition, rotation: pipetteRotation })}
 
       {/* Soft contact shadows on bench */}
       <mesh position={[-1.2, 0.042, 0.1]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -758,28 +1034,31 @@ function LabScene({ onAction, pourSignal, chem }) {
         <circleGeometry args={[0.3, 32]} />
         <meshBasicMaterial color={0x000000} transparent opacity={0.14} />
       </mesh>
-      <mesh position={[0, 0.042, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh
+        position={[titrationAxisX, 0.042, titrationAxisZ]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
         <circleGeometry args={[0.34, 32]} />
         <meshBasicMaterial color={0x000000} transparent opacity={0.12} />
       </mesh>
-      <mesh position={[0.8, 0.042, -0.3]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh
+        position={[buretteAxisX, 0.042, buretteAxisZ]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
         <circleGeometry args={[0.16, 32]} />
         <meshBasicMaterial color={0x000000} transparent opacity={0.1} />
       </mesh>
-
-      <rectAreaLight
-        color={0xffffff}
-        intensity={1.9}
-        width={6}
-        height={4}
-        position={[0, 4, 0]}
+      <mesh
+        position={[pipettePosition[0], 0.042, pipettePosition[2]]}
         rotation={[-Math.PI / 2, 0, 0]}
-      />
-
+      >
+        <circleGeometry args={[0.1, 28]} />
+        <meshBasicMaterial color={0x000000} transparent opacity={0.08} />
+      </mesh>
       <directionalLight
         color={0xffffff}
-        intensity={0.48}
-        position={[0, 3.1, 1.1]}
+        intensity={0.8}
+        position={[1.2, 3.4, 1.3]}
         castShadow
         shadow-mapSize-width={1536}
         shadow-mapSize-height={1536}
@@ -793,12 +1072,13 @@ function LabScene({ onAction, pourSignal, chem }) {
         shadow-normalBias={0.015}
       />
 
-      <directionalLight
-        color={0xffffff}
-        intensity={0.2}
-        position={[0, 1.9, 2.9]}
+      <ambientLight color={0xffffff} intensity={0.6} />
+      <hemisphereLight
+        color={0xe8eef9}
+        groundColor={0x5f6770}
+        intensity={0.22}
+        position={[0, 2.2, 0]}
       />
-      <ambientLight color={0xffffff} intensity={0.58} />
     </group>
   );
 }
@@ -850,9 +1130,12 @@ export default function LabRenderer({
   onAction,
 }) {
   const canvasContainerRef = useRef(null);
+  const sceneRootRef = useRef(null);
   const [canvasHost, setCanvasHost] = useState(null);
   const [canvasReady, setCanvasReady] = useState(false);
   const [pourSignal, setPourSignal] = useState(0);
+  const [hoverName, setHoverName] = useState(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   const setCanvasContainerRef = useCallback((node) => {
     canvasContainerRef.current = node;
@@ -897,20 +1180,20 @@ export default function LabRenderer({
   const labels = useMemo(
     () => [
       {
-        name: "AgNO3",
+        name: "HCl Solution",
         concentration: "0.1M",
         volume: `${(12 - Math.min(12, pourSignal * 0.6)).toFixed(1)} mL`,
-        position: new THREE.Vector3(-1.25, 1.95, 0.22),
+        position: new THREE.Vector3(-1.22, 1.95, 0.22),
       },
       {
-        name: "NaCl",
+        name: "NaOH Solution",
         concentration: "0.1M",
         volume: "12.0 mL",
-        position: new THREE.Vector3(1.25, 1.95, 0.22),
+        position: new THREE.Vector3(1.22, 1.95, 0.22),
       },
       {
-        name: "Reaction Vessel",
-        concentration: "AgCl formation",
+        name: "Conical Flask",
+        concentration: "Analyte",
         volume: `${(6 + Math.min(12, pourSignal * 0.6)).toFixed(1)} mL`,
         position: new THREE.Vector3(0, 2.05, 0),
       },
@@ -976,10 +1259,16 @@ export default function LabRenderer({
           className="lab-canvas"
           id="lab-canvas-container"
           ref={setCanvasContainerRef}
+          style={{ position: "relative" }}
         >
           <button type="button" className="pour-button" onClick={triggerPour}>
             Pour AgNO3
           </button>
+
+          <HoverTooltipOverlay
+            hoverName={hoverName}
+            mousePosition={mousePosition}
+          />
 
           {canvasReady ? (
             <Canvas
@@ -1001,7 +1290,14 @@ export default function LabRenderer({
               <LabScene
                 chem={chem}
                 pourSignal={pourSignal}
+                sceneRootRef={sceneRootRef}
                 onAction={() => onAction?.(expectedStepId)}
+              />
+
+              <HoverRaycaster
+                sceneRootRef={sceneRootRef}
+                onHoverChange={setHoverName}
+                onMouseMove={setMousePosition}
               />
 
               <OrbitControls
