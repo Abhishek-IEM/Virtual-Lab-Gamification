@@ -1,245 +1,107 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, Environment, OrbitControls } from "@react-three/drei";
+import { MeshReflectorMaterial, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
+import {
+  CSS2DObject,
+  CSS2DRenderer,
+} from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { SSAOPass } from "three/examples/jsm/postprocessing/SSAOPass.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 import "./LabRenderer.css";
 
-function InitialCameraPose() {
-  const { camera } = useThree();
-
-  useEffect(() => {
-    camera.position.set(1.7, 3.15, 7.05);
-    camera.lookAt(0, 0.2, 0);
-    camera.fov = 52;
-    camera.updateProjectionMatrix();
-  }, [camera]);
-
-  return null;
-}
-
-function getChemState(experimentId, completedSteps, animating) {
+function getChemState(experimentId, completedSteps) {
   const done = (stepId) => completedSteps.includes(stepId);
-
-  if (experimentId === "acid-base-titration") {
-    const volumeMl = done("titrate-naoh")
-      ? 24.7
-      : done("add-phenolphthalein")
-        ? 4.2
-        : 0;
-    const pH = done("observe-endpoint")
-      ? 8.2
-      : done("titrate-naoh")
-        ? 7.1
-        : 1.2;
-    const liquidColor = done("observe-endpoint")
-      ? "#f4b7d2"
-      : done("add-phenolphthalein")
-        ? "#e9f7ff"
-        : "#d5f1ff";
-
-    return {
-      pH,
-      volumeMl,
-      liquidColor,
-      reaction: done("observe-endpoint")
-        ? "Endpoint reached: faint permanent pink."
-        : animating === "burette-drops"
-          ? "NaOH dispensing from burette."
-          : "Prepare titration setup.",
-    };
-  }
-
-  if (experimentId === "ph-indicator-testing") {
-    const pH = done("record-ph") ? 9.4 : done("add-methyl-orange") ? 6.8 : 4.2;
-    const liquidColor = done("add-methyl-orange")
-      ? "#ffd96a"
-      : done("add-phenolphthalein")
-        ? "#f5e7f2"
-        : "#e4f6ff";
-
-    return {
-      pH,
-      volumeMl: done("prepare-sample") ? 12 : 0,
-      liquidColor,
-      reaction: done("record-ph")
-        ? "Indicator response recorded against pH scale."
-        : "Add indicators dropwise and compare colors.",
-    };
-  }
 
   if (experimentId === "precipitation-reaction") {
     return {
-      pH: 6.8,
+      pH: done("observe-agcl") ? 5.9 : done("add-nacl") ? 6.5 : 6.9,
       volumeMl: done("pour-agno3") ? 18 : 0,
-      liquidColor: "#e8f2ff",
       reaction: done("observe-agcl")
-        ? "White AgCl precipitate clearly visible."
+        ? "White AgCl precipitate has settled at the bottom."
         : done("add-nacl")
-          ? "Double displacement started. AgCl forming."
-          : "Add NaCl to silver nitrate to trigger precipitation.",
-    };
-  }
-
-  if (experimentId === "neutralization-reaction") {
-    return {
-      pH: done("check-ph-neutral") ? 7.0 : done("add-base") ? 7.6 : 1.4,
-      volumeMl: done("add-base") ? 20 : done("add-acid") ? 10 : 0,
-      liquidColor: done("add-base") ? "#f6fdff" : "#e7f6ff",
-      reaction: done("check-ph-neutral")
-        ? "Neutralization complete. pH close to 7."
-        : "Mix acid and base, then stir for uniform reaction.",
-    };
-  }
-
-  if (experimentId === "filtration-process") {
-    return {
-      pH: 6.9,
-      volumeMl: done("collect-filtrate")
-        ? 13.5
-        : done("pour-mixture")
-          ? 4.8
-          : 0,
-      liquidColor: "#dff5ff",
-      reaction: done("collect-filtrate")
-        ? "Clear filtrate collected. Residue remains on paper."
-        : "Pour mixture slowly into filter cone.",
+          ? "AgNO3 + NaCl reacting. AgCl precipitate is forming."
+          : "Add NaCl and then pour AgNO3 to start precipitation.",
+      liquidColor: done("observe-agcl") ? "#dfe8f0" : "#eaf1ff",
     };
   }
 
   return {
-    pH: done("add-acid-gas") ? 3.4 : 6.5,
+    pH: 6.8,
     volumeMl: done("add-reagent-a") ? 8 : 0,
-    liquidColor: done("add-reagent-b") ? "#74d0b8" : "#75b9ff",
-    reaction: done("add-acid-gas")
-      ? "CO2 bubbles visible after carbonate + acid reaction."
-      : done("add-reagent-b")
-        ? "Color changed due to chemical mixing."
-        : "Add reagents to begin mixing reaction.",
+    reaction: "Interactive photorealistic chemistry bench ready.",
+    liquidColor: "#e8f2ff",
   };
 }
 
-function createVerticalGradientTexture(topColor, bottomColor) {
+function createConcreteTexture({
+  base = "#24282e",
+  line = "#343940",
+  noise = 0.18,
+}) {
   const canvas = document.createElement("canvas");
-  canvas.width = 8;
-  canvas.height = 256;
-
+  canvas.width = 1024;
+  canvas.height = 1024;
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
-  const grad = ctx.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, topColor);
-  grad.addColorStop(1, bottomColor);
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 8, 256);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.needsUpdate = true;
-  return texture;
-}
-
-function createLabelTexture(text, options = {}) {
-  const {
-    width = 256,
-    height = 96,
-    bg = "rgba(250, 252, 255, 0.92)",
-    border = "rgba(35, 52, 75, 0.4)",
-    textColor = "#20324a",
-    font = "600 42px Segoe UI",
-  } = options;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-
-  ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = bg;
-  ctx.strokeStyle = border;
+  ctx.strokeStyle = line;
   ctx.lineWidth = 4;
-
-  const radius = 14;
-  ctx.beginPath();
-  ctx.moveTo(radius, 2);
-  ctx.lineTo(width - radius, 2);
-  ctx.quadraticCurveTo(width - 2, 2, width - 2, radius);
-  ctx.lineTo(width - 2, height - radius);
-  ctx.quadraticCurveTo(width - 2, height - 2, width - radius, height - 2);
-  ctx.lineTo(radius, height - 2);
-  ctx.quadraticCurveTo(2, height - 2, 2, height - radius);
-  ctx.lineTo(2, radius);
-  ctx.quadraticCurveTo(2, 2, radius, 2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-
-  ctx.font = font;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = textColor;
-  ctx.fillText(text, width / 2, height / 2 + 2);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.needsUpdate = true;
-  return texture;
-}
-
-function createScratchTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 512;
-  canvas.height = 512;
-
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-
-  ctx.clearRect(0, 0, 512, 512);
-  ctx.strokeStyle = "rgba(150, 170, 195, 0.18)";
-  ctx.lineWidth = 1;
-
-  for (let i = 0; i < 170; i += 1) {
-    const x = Math.random() * 512;
-    const y = Math.random() * 512;
-    const len = 10 + Math.random() * 36;
-    const angle = -0.22 + Math.random() * 0.44;
+  for (let i = 0; i <= 1024; i += 128) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i, 1024);
+    ctx.stroke();
 
     ctx.beginPath();
-    ctx.moveTo(x, y);
-    ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+    ctx.moveTo(0, i);
+    ctx.lineTo(1024, i);
     ctx.stroke();
+  }
+
+  const amount = Math.floor(1024 * 1024 * noise * 0.02);
+  for (let i = 0; i < amount; i += 1) {
+    const x = Math.random() * 1024;
+    const y = Math.random() * 1024;
+    const alpha = 0.06 + Math.random() * 0.1;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.fillRect(x, y, 2, 2);
   }
 
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(2, 1);
+  texture.repeat.set(6, 6);
+  texture.colorSpace = THREE.SRGBColorSpace;
   return texture;
 }
 
-function createSurfaceTexture() {
+function createCondensationNormalTexture() {
   const canvas = document.createElement("canvas");
-  canvas.width = 1024;
+  canvas.width = 512;
   canvas.height = 512;
-
   const ctx = canvas.getContext("2d");
   if (!ctx) return null;
 
-  const grad = ctx.createLinearGradient(0, 0, 1024, 512);
-  grad.addColorStop(0, "#dedfe3");
-  grad.addColorStop(0.5, "#e8eaee");
-  grad.addColorStop(1, "#dadde2");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 1024, 512);
+  ctx.fillStyle = "rgb(128,128,255)";
+  ctx.fillRect(0, 0, 512, 512);
 
-  ctx.fillStyle = "rgba(112, 122, 136, 0.08)";
-  for (let i = 0; i < 240; i += 1) {
-    const x = Math.random() * 1024;
+  for (let i = 0; i < 520; i += 1) {
+    const x = Math.random() * 512;
     const y = Math.random() * 512;
-    const r = Math.random() * 1.4;
+    const r = 1 + Math.random() * 4;
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, "rgba(150,170,255,0.45)");
+    grad.addColorStop(1, "rgba(90,110,230,0)");
+    ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(x, y, r, 0, Math.PI * 2);
     ctx.fill();
@@ -248,732 +110,742 @@ function createSurfaceTexture() {
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(1.8, 1);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.repeat.set(2, 2);
   return texture;
 }
 
-function createBackdropTexture() {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1600;
-  canvas.height = 900;
+function RendererConfig({ containerRef }) {
+  const { scene, gl, camera } = useThree();
 
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
+  useEffect(() => {
+    RectAreaLightUniformsLib.init();
 
-  const grad = ctx.createLinearGradient(0, 0, 0, 900);
-  grad.addColorStop(0, "#f5f7fa");
-  grad.addColorStop(0.65, "#eef2f6");
-  grad.addColorStop(1, "#e9edf1");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 1600, 900);
+    gl.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    gl.shadowMap.enabled = true;
+    gl.shadowMap.type = THREE.PCFSoftShadowMap;
+    gl.physicallyCorrectLights = true;
+    gl.toneMapping = THREE.ACESFilmicToneMapping;
+    gl.toneMappingExposure = 0.84;
+    gl.outputColorSpace = THREE.SRGBColorSpace;
 
-  ctx.strokeStyle = "rgba(185, 194, 205, 0.18)";
-  ctx.lineWidth = 2;
-  for (let y = 120; y < 900; y += 120) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(1600, y);
-    ctx.stroke();
-  }
+    scene.background = new THREE.Color(0x111827);
 
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+    const container = containerRef.current;
+    if (container) {
+      const width =
+        container.clientWidth > 0
+          ? container.clientWidth
+          : Math.floor(window.innerWidth * 0.55);
+      const height =
+        container.clientHeight > 0
+          ? container.clientHeight
+          : Math.floor(window.innerHeight * 0.7);
+      const safeWidth = Math.max(1, width);
+      const safeHeight = Math.max(1, height);
+
+      gl.setSize(safeWidth, safeHeight);
+      camera.aspect = safeWidth / safeHeight;
+      camera.updateProjectionMatrix();
+    }
+  }, [gl, scene, camera, containerRef]);
+
+  return null;
 }
 
-function createTileTexture() {
-  const tileCanvas = document.createElement("canvas");
-  tileCanvas.width = 256;
-  tileCanvas.height = 256;
+function EnvironmentReflections() {
+  const { scene, gl } = useThree();
 
-  const ctx = tileCanvas.getContext("2d");
-  if (!ctx) return null;
+  useEffect(() => {
+    const pmrem = new THREE.PMREMGenerator(gl);
+    pmrem.compileEquirectangularShader();
+    let neutralEnv = null;
 
-  ctx.fillStyle = "#f0f0ec";
-  ctx.fillRect(0, 0, 256, 256);
-  ctx.strokeStyle = "#ccccc0";
-  ctx.lineWidth = 2;
+    try {
+      neutralEnv = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    } catch {
+      const fallbackScene = new THREE.Scene();
+      fallbackScene.background = new THREE.Color(0x334455);
+      neutralEnv = pmrem.fromScene(fallbackScene).texture;
+    }
 
-  for (let i = 0; i <= 256; i += 64) {
-    ctx.beginPath();
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i, 256);
-    ctx.stroke();
+    scene.environment = neutralEnv;
 
-    ctx.beginPath();
-    ctx.moveTo(0, i);
-    ctx.lineTo(256, i);
-    ctx.stroke();
-  }
+    return () => {
+      scene.environment = null;
+      neutralEnv?.dispose();
+      pmrem.dispose();
+    };
+  }, [scene, gl]);
 
-  const tileTexture = new THREE.CanvasTexture(tileCanvas);
-  tileTexture.wrapS = THREE.RepeatWrapping;
-  tileTexture.wrapT = THREE.RepeatWrapping;
-  tileTexture.repeat.set(6, 4);
-  tileTexture.colorSpace = THREE.SRGBColorSpace;
-  return tileTexture;
+  return null;
 }
 
-function RebuiltLabScene({ onAction, chem, animating }) {
-  const hclBeakerRef = useRef(null);
-  const indicatorBeakerRef = useRef(null);
-  const naohBeakerRef = useRef(null);
+function CameraBob() {
+  const { camera } = useThree();
+  const baseY = useRef(1.8);
 
-  const leftLiquidRef = useRef(null);
-  const rightLiquidRef = useRef(null);
-  const flaskLiquidRef = useRef(null);
-  const dropletRef = useRef(null);
-  const pourStreamRef = useRef(null);
-  const avatarHeadRef = useRef(null);
+  useEffect(() => {
+    camera.position.set(0, 1.8, 3.5);
+    camera.fov = 42;
+    camera.lookAt(0, 0.5, 0);
+    camera.updateProjectionMatrix();
+  }, [camera]);
 
-  const LEFT_X = -2.5;
-  const RIGHT_X = 2.5;
-  const GLASS_Z = 0.72;
-  const LABEL_Z = 1.38;
+  useFrame(({ clock }) => {
+    camera.position.y =
+      baseY.current + Math.sin(clock.elapsedTime * 1.3) * 0.002;
+  });
 
-  const GLASS = useMemo(
+  return null;
+}
+
+function PostProcessing() {
+  const { gl, scene, camera, size } = useThree();
+  const composerRef = useRef(null);
+  const grainPassRef = useRef(null);
+
+  useEffect(() => {
+    const composer = new EffectComposer(gl);
+    const renderPass = new RenderPass(scene, camera);
+
+    const ssaoPass = new SSAOPass(scene, camera, size.width, size.height);
+    ssaoPass.kernelRadius = 14;
+    ssaoPass.minDistance = 0.005;
+    ssaoPass.maxDistance = 0.14;
+
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(size.width, size.height),
+      0.34,
+      0.35,
+      0.9,
+    );
+
+    const lensDistortionPass = new ShaderPass({
+      uniforms: {
+        tDiffuse: { value: null },
+        strength: { value: 0.03 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float strength;
+        varying vec2 vUv;
+
+        void main() {
+          vec2 uv = vUv;
+          vec2 centered = uv * 2.0 - 1.0;
+          float r2 = dot(centered, centered);
+          centered *= 1.0 + strength * r2;
+          vec2 distorted = centered * 0.5 + 0.5;
+
+          if (distorted.x < 0.0 || distorted.x > 1.0 || distorted.y < 0.0 || distorted.y > 1.0) {
+            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+          } else {
+            gl_FragColor = texture2D(tDiffuse, distorted);
+          }
+        }
+      `,
+    });
+
+    const grainPass = new ShaderPass({
+      uniforms: {
+        tDiffuse: { value: null },
+        time: { value: 0 },
+        amount: { value: 0.03 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float time;
+        uniform float amount;
+        varying vec2 vUv;
+
+        float rand(vec2 co) {
+          return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+        }
+
+        void main() {
+          vec4 color = texture2D(tDiffuse, vUv);
+          float grain = (rand(vUv + time * 0.07) - 0.5) * amount;
+          color.rgb += grain;
+          gl_FragColor = color;
+        }
+      `,
+    });
+
+    composer.addPass(renderPass);
+    composer.addPass(ssaoPass);
+    composer.addPass(bloomPass);
+    composer.addPass(lensDistortionPass);
+    composer.addPass(grainPass);
+
+    composerRef.current = composer;
+    grainPassRef.current = grainPass;
+
+    return () => {
+      composer.dispose();
+      composerRef.current = null;
+      grainPassRef.current = null;
+    };
+  }, [gl, scene, camera, size]);
+
+  useEffect(() => {
+    if (composerRef.current) {
+      composerRef.current.setSize(size.width, size.height);
+    }
+  }, [size]);
+
+  useFrame((_, delta) => {
+    if (!composerRef.current || !grainPassRef.current) return;
+    grainPassRef.current.uniforms.time.value += delta;
+    composerRef.current.render(delta);
+  }, 1);
+
+  return null;
+}
+
+function DustMotes() {
+  const pointsRef = useRef(null);
+  const count = 220;
+
+  const positions = useMemo(() => {
+    const arr = new Float32Array(count * 3);
+    for (let i = 0; i < count; i += 1) {
+      arr[i * 3] = (Math.random() - 0.5) * 7.2;
+      arr[i * 3 + 1] = 0.7 + Math.random() * 2.2;
+      arr[i * 3 + 2] = -2.2 + Math.random() * 3.8;
+    }
+    return arr;
+  }, []);
+
+  useFrame(({ clock }) => {
+    if (!pointsRef.current) return;
+    pointsRef.current.rotation.y = clock.elapsedTime * 0.025;
+    pointsRef.current.position.y =
+      1.2 + Math.sin(clock.elapsedTime * 0.22) * 0.03;
+  });
+
+  return (
+    <points ref={pointsRef}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        color={0xc7d2de}
+        size={0.02}
+        transparent
+        opacity={0.16}
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
+function FloatingLabels({ containerRef, labels }) {
+  const { scene, camera, gl } = useThree();
+  const rendererRef = useRef(null);
+  const labelObjectsRef = useRef([]);
+  const upVec = useMemo(() => new THREE.Vector3(0, 1, 0), []);
+
+  useEffect(() => {
+    const renderer = new CSS2DRenderer();
+    renderer.setSize(gl.domElement.clientWidth, gl.domElement.clientHeight);
+    renderer.domElement.className = "css2d-layer";
+
+    const container = containerRef.current;
+    if (container) {
+      container.appendChild(renderer.domElement);
+    }
+
+    rendererRef.current = renderer;
+
+    labelObjectsRef.current = labels.map((label) => {
+      const el = document.createElement("div");
+      el.className = "chem-label";
+      el.innerHTML = `<strong>${label.name}</strong><span>${label.concentration}</span><span>${label.volume}</span>`;
+      const cssLabel = new CSS2DObject(el);
+      cssLabel.position.copy(label.position);
+      scene.add(cssLabel);
+      return cssLabel;
+    });
+
+    const onResize = () => {
+      if (!rendererRef.current) return;
+      rendererRef.current.setSize(
+        gl.domElement.clientWidth,
+        gl.domElement.clientHeight,
+      );
+    };
+
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      labelObjectsRef.current.forEach((obj) => {
+        scene.remove(obj);
+      });
+      labelObjectsRef.current = [];
+
+      if (rendererRef.current?.domElement.parentNode) {
+        rendererRef.current.domElement.parentNode.removeChild(
+          rendererRef.current.domElement,
+        );
+      }
+      rendererRef.current = null;
+    };
+  }, [scene, camera, gl, containerRef, labels]);
+
+  useFrame(() => {
+    if (!rendererRef.current) return;
+
+    labelObjectsRef.current.forEach((obj) => {
+      const toCam = camera.position.clone().sub(obj.position).normalize();
+      const angleFactor = Math.max(
+        0,
+        Math.min(1, (toCam.dot(upVec) - 0.08) / 0.45),
+      );
+      obj.element.style.opacity = angleFactor.toFixed(2);
+    });
+
+    rendererRef.current.render(scene, camera);
+  });
+
+  return null;
+}
+
+function PrecipitateParticles({ active, cloudinessRef }) {
+  const pointsRef = useRef(null);
+  const velocityRef = useRef([]);
+  const baseYRef = useRef([]);
+  const count = 360;
+
+  const positions = useMemo(() => {
+    const arr = new Float32Array(count * 3);
+    const velocities = [];
+    const baseY = [];
+
+    for (let i = 0; i < count; i += 1) {
+      const x = (Math.random() - 0.5) * 0.6;
+      const y = 0.78 + Math.random() * 0.5;
+      const z = (Math.random() - 0.5) * 0.6;
+      arr[i * 3] = x;
+      arr[i * 3 + 1] = y;
+      arr[i * 3 + 2] = z;
+      velocities.push(0);
+      baseY.push(-0.22 + Math.random() * 0.06);
+    }
+
+    velocityRef.current = velocities;
+    baseYRef.current = baseY;
+    return arr;
+  }, []);
+
+  useFrame((_, delta) => {
+    if (!pointsRef.current || !active) return;
+    const attr = pointsRef.current.geometry.attributes.position;
+
+    for (let i = 0; i < count; i += 1) {
+      const idx = i * 3 + 1;
+      velocityRef.current[i] += 1.9 * delta;
+      attr.array[idx] -= velocityRef.current[i] * delta;
+
+      const floor = baseYRef.current[i];
+      if (attr.array[idx] <= floor) {
+        attr.array[idx] = floor;
+        velocityRef.current[i] = 0;
+      }
+    }
+
+    attr.needsUpdate = true;
+    pointsRef.current.material.opacity = 0.08 + cloudinessRef.current * 0.75;
+  });
+
+  return (
+    <points ref={pointsRef} position={[0, 0.22, 0]} visible={active}>
+      <bufferGeometry>
+        <bufferAttribute attach="attributes-position" args={[positions, 3]} />
+      </bufferGeometry>
+      <pointsMaterial
+        color={0xffffff}
+        size={0.025}
+        transparent
+        opacity={0}
+        depthWrite={false}
+      />
+    </points>
+  );
+}
+
+function LabScene({ onAction, pourSignal, chem }) {
+  const agNo3LiquidRef = useRef(null);
+  const reactionLiquidRef = useRef(null);
+  const streamRef = useRef(null);
+  const reactionGlowRef = useRef(null);
+
+  const [isPouring, setIsPouring] = useState(false);
+  const [precipitateActive, setPrecipitateActive] = useState(false);
+  const pourProgressRef = useRef(0);
+  const transferRatioRef = useRef(0);
+  const cloudinessRef = useRef(0);
+  const reactionFlashRef = useRef(0);
+
+  const concreteWall = useMemo(
+    () =>
+      createConcreteTexture({ base: "#e8ecf0", line: "#d0d4d8", noise: 0.2 }),
+    [],
+  );
+  const floorTexture = useMemo(
+    () =>
+      createConcreteTexture({ base: "#f0f4f8", line: "#e0e4e8", noise: 0.15 }),
+    [],
+  );
+  const condensationNormal = useMemo(
+    () => createCondensationNormalTexture(),
+    [],
+  );
+
+  const glassMaterial = useMemo(
     () =>
       new THREE.MeshPhysicalMaterial({
-        color: new THREE.Color(0xffffff),
-        transmission: 0.95,
-        opacity: 0.1,
-        transparent: true,
-        roughness: 0.05,
+        color: 0xf7fbff,
         metalness: 0,
-        ior: 1.5,
-        thickness: 0.5,
+        roughness: 0.035,
+        transmission: 0.94,
+        thickness: 0.9,
+        ior: 1.48,
+        transparent: true,
         side: THREE.DoubleSide,
-        envMapIntensity: 2.6,
+        envMapIntensity: 1.45,
         clearcoat: 1,
-        clearcoatRoughness: 0.02,
+        clearcoatRoughness: 0.06,
+        attenuationColor: new THREE.Color(0xcfe6ff),
+        attenuationDistance: 1.2,
       }),
     [],
   );
 
   useEffect(() => {
-    const hclBeaker = hclBeakerRef.current;
-    const indicatorBeaker = indicatorBeakerRef.current;
-    const naohBeaker = naohBeakerRef.current;
+    if (!pourSignal) return;
+    setIsPouring(true);
+    setPrecipitateActive(false);
+    cloudinessRef.current = 0;
+    onAction?.();
 
-    if (!hclBeaker || !indicatorBeaker || !naohBeaker) return;
+    const settleTimer = setTimeout(() => {
+      setIsPouring(false);
+      setPrecipitateActive(true);
+      reactionFlashRef.current = 1;
+    }, 1800);
 
-    hclBeaker.material = GLASS;
-    indicatorBeaker.material = GLASS;
-    naohBeaker.material = GLASS;
-  }, [GLASS]);
+    return () => {
+      clearTimeout(settleTimer);
+    };
+  }, [pourSignal, onAction]);
 
-  const glassMat = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: 0xffffff,
-        transmission: 0.95,
-        roughness: 0.05,
-        metalness: 0,
-        ior: 1.5,
-        thickness: 0.4,
-        transparent: true,
-        opacity: 0.16,
-        side: THREE.DoubleSide,
-        envMapIntensity: 2.9,
-        clearcoat: 1,
-      }),
-    [],
-  );
-
-  const tableTexture = useMemo(() => createSurfaceTexture(), []);
-
-  const beakerInnerRadius = 0.5;
-  const beakerHeight = 1.9;
-
-  const liquidHClMat = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: 0xecf4ff,
-        roughness: 0.02,
-        metalness: 0.04,
-        transparent: true,
-        opacity: 0.62,
-        transmission: 0.9,
-        ior: 1.338,
-        thickness: 0.7,
-      }),
-    [],
-  );
-
-  const liquidIndicatorMat = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: 0xd6e6ff,
-        roughness: 0.02,
-        metalness: 0,
-        transparent: true,
-        opacity: 0.6,
-        transmission: 0.84,
-        thickness: 0.68,
-      }),
-    [],
-  );
-
-  const liquidNaOHMat = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: 0x92c4ff,
-        roughness: 0.02,
-        metalness: 0.04,
-        transparent: true,
-        opacity: 0.66,
-        transmission: 0.88,
-        ior: 1.338,
-        thickness: 0.75,
-      }),
-    [],
-  );
-
-  const flaskBaseColor = useMemo(
-    () => new THREE.Color(chem?.liquidColor || "#c9f5ff"),
-    [chem?.liquidColor],
-  );
-  const flaskTopHex = useMemo(
-    () =>
-      `#${flaskBaseColor.clone().lerp(new THREE.Color("#ffffff"), 0.3).getHexString()}`,
-    [flaskBaseColor],
-  );
-  const flaskBottomHex = useMemo(
-    () => `#${flaskBaseColor.clone().multiplyScalar(0.78).getHexString()}`,
-    [flaskBaseColor],
-  );
-  const flaskMeniscusHex = useMemo(
-    () =>
-      `#${flaskBaseColor.clone().lerp(new THREE.Color("#ffffff"), 0.42).getHexString()}`,
-    [flaskBaseColor],
-  );
-
-  const tileTexture = useMemo(() => createTileTexture(), []);
-  const rodScratchTexture = useMemo(() => createScratchTexture(), []);
-
-  const hclLabelTexture = useMemo(
-    () =>
-      createLabelTexture("AgNO3", {
-        bg: "rgba(0, 0, 0, 0.62)",
-        border: "rgba(255, 255, 255, 0.22)",
-        textColor: "#eff6ff",
-        font: "600 34px Inter",
-      }),
-    [],
-  );
-  const naohLabelTexture = useMemo(
-    () =>
-      createLabelTexture("NaCl", {
-        bg: "rgba(0, 0, 0, 0.62)",
-        border: "rgba(255, 255, 255, 0.22)",
-        textColor: "#eff6ff",
-        font: "600 34px Inter",
-        width: 280,
-      }),
-    [],
-  );
-  const indicatorLabelTexture = useMemo(
-    () =>
-      createLabelTexture("Indicator", {
-        width: 300,
-        bg: "rgba(0, 0, 0, 0.62)",
-        border: "rgba(255, 255, 255, 0.22)",
-        textColor: "#eff6ff",
-        font: "600 32px Inter",
-      }),
-    [],
-  );
-
-  const flaskProfile = useMemo(
-    () => [
-      new THREE.Vector2(0, 0),
-      new THREE.Vector2(0.62, 0),
-      new THREE.Vector2(0.86, 0.35),
-      new THREE.Vector2(0.98, 0.95),
-      new THREE.Vector2(0.78, 1.55),
-      new THREE.Vector2(0.27, 2.02),
-      new THREE.Vector2(0.27, 2.55),
-    ],
-    [],
-  );
-
-  const beakerMarks = useMemo(
-    () =>
-      Array.from({ length: 15 }, (_, i) => ({
-        y: -1.01 + i * 0.13,
-        major: i % 3 === 0,
-      })),
-    [],
-  );
-
-  const buretteMarks = useMemo(
-    () =>
-      Array.from({ length: 21 }, (_, i) => ({
-        y: 2.52 - i * 0.14,
-        major: i % 5 === 0,
-      })),
-    [],
-  );
-
-  useFrame(({ clock }) => {
-    const t = clock.getElapsedTime();
-    const pouringActive =
-      animating === "burette-drops" || animating?.includes("pour") || false;
-
-    if (leftLiquidRef.current) {
-      leftLiquidRef.current.rotation.z = Math.sin(t * 1.1) * 0.008;
-      leftLiquidRef.current.position.y = -0.6 + Math.sin(t * 1.15) * 0.007;
+  useFrame((_, delta) => {
+    if (condensationNormal) {
+      condensationNormal.offset.x += delta * 0.01;
+      condensationNormal.offset.y += delta * 0.006;
     }
 
-    if (rightLiquidRef.current) {
-      rightLiquidRef.current.rotation.z = Math.cos(t * 1.15) * 0.008;
-      rightLiquidRef.current.position.y = -0.6 + Math.cos(t * 1.2) * 0.007;
+    const targetPour = isPouring ? 1 : 0;
+    const nextPour = THREE.MathUtils.damp(
+      pourProgressRef.current,
+      targetPour,
+      3.2,
+      delta,
+    );
+    pourProgressRef.current = nextPour;
+
+    if (isPouring) {
+      transferRatioRef.current = Math.min(
+        1,
+        transferRatioRef.current + delta * 0.22,
+      );
     }
 
-    if (flaskLiquidRef.current) {
-      flaskLiquidRef.current.rotation.z = Math.sin(t * 1.4) * 0.012;
-      flaskLiquidRef.current.position.y = -0.86 + Math.sin(t * 1.3) * 0.009;
+    if (agNo3LiquidRef.current) {
+      agNo3LiquidRef.current.scale.y = 1 - transferRatioRef.current * 0.45;
     }
 
-    if (dropletRef.current) {
-      const cycle = (t * 0.75) % 1;
-      dropletRef.current.position.y = -0.15 - cycle * 0.86;
-      dropletRef.current.visible = cycle < 0.9;
-      const s = 0.86 + (1 - cycle) * 0.22;
-      dropletRef.current.scale.set(s, s, s);
+    if (reactionLiquidRef.current) {
+      reactionLiquidRef.current.scale.y =
+        0.62 + transferRatioRef.current * 0.33;
+      reactionLiquidRef.current.position.y =
+        -0.18 + transferRatioRef.current * 0.17;
+      reactionLiquidRef.current.material.color.setStyle(
+        transferRatioRef.current > 0.55
+          ? `rgb(${214 + cloudinessRef.current * 10}, ${224 + cloudinessRef.current * 8}, ${236 + cloudinessRef.current * 6})`
+          : chem.liquidColor,
+      );
+      reactionLiquidRef.current.material.opacity =
+        0.52 + cloudinessRef.current * 0.2;
     }
 
-    if (pourStreamRef.current) {
-      const streamPulse = 0.7 + Math.sin(t * 10) * 0.08;
-      pourStreamRef.current.scale.y = pouringActive ? streamPulse : 0.04;
-      pourStreamRef.current.material.opacity = pouringActive ? 0.32 : 0.06;
+    if (streamRef.current) {
+      streamRef.current.visible = nextPour > 0.04;
+      streamRef.current.scale.y = 0.35 + nextPour * 0.92;
+      streamRef.current.material.opacity = nextPour * 0.5;
     }
 
-    if (avatarHeadRef.current) {
-      avatarHeadRef.current.rotation.y = Math.sin(t * 0.24) * 0.04;
-      avatarHeadRef.current.position.y = 1.02;
+    const targetCloud = precipitateActive ? 1 : nextPour * 0.35;
+    cloudinessRef.current = THREE.MathUtils.damp(
+      cloudinessRef.current,
+      targetCloud,
+      1.9,
+      delta,
+    );
+
+    if (reactionGlowRef.current) {
+      reactionFlashRef.current = Math.max(0, reactionFlashRef.current - delta);
+      const flash = Math.sin((1 - reactionFlashRef.current) * Math.PI) * 0.5;
+      reactionGlowRef.current.intensity =
+        reactionFlashRef.current > 0 ? flash : 0;
     }
   });
 
   return (
     <group>
-      <mesh position={[0, 1.45, -5.8]}>
-        <planeGeometry args={[15, 10]} />
-        <meshStandardMaterial color={0x1f2632} roughness={0.9} metalness={0} />
-      </mesh>
-
-      <mesh position={[0, -1.25, 0]} receiveShadow>
-        <boxGeometry args={[11.8, 0.26, 5.6]} />
-        <meshPhysicalMaterial
-          map={tableTexture}
-          roughnessMap={tableTexture}
-          color={0x192334}
-          roughness={0.52}
-          metalness={0.3}
-          clearcoat={0.24}
-          clearcoatRoughness={0.42}
-          envMapIntensity={1.2}
-        />
-      </mesh>
-
-      <mesh position={[0, -1.106, 0]} receiveShadow>
-        <boxGeometry args={[11.5, 0.02, 5.35]} />
-        <meshPhysicalMaterial
-          color={0x202c3f}
-          roughness={0.24}
-          metalness={0.42}
-          clearcoat={0.9}
-          clearcoatRoughness={0.12}
-          transparent
-          opacity={0.45}
-          envMapIntensity={1.45}
-        />
-      </mesh>
-
-      <mesh position={[0, -1.08, 2.68]} receiveShadow>
-        <boxGeometry args={[11.8, 0.08, 0.18]} />
-        <meshStandardMaterial color={0xcdd2d9} roughness={0.8} />
-      </mesh>
-
-      <mesh position={[LEFT_X, -1.22, GLASS_Z]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.68, 48]} />
-        <meshStandardMaterial color={0x000000} transparent opacity={0.12} />
-      </mesh>
-
+      {/* Floor */}
       <mesh
-        position={[RIGHT_X, -1.22, GLASS_Z]}
+        position={[0, -1.64, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
       >
-        <circleGeometry args={[0.68, 48]} />
-        <meshStandardMaterial color={0x000000} transparent opacity={0.12} />
+        <planeGeometry args={[12, 12]} />
+        <meshStandardMaterial color={0x0d0d0d} roughness={0.8} />
       </mesh>
 
-      <mesh position={[0, -1.22, 0.82]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.66, 48]} />
-        <meshStandardMaterial color={0x000000} transparent opacity={0.12} />
-      </mesh>
-
-      <mesh position={[0, -1.22, -0.5]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[1.02, 48]} />
-        <meshStandardMaterial color={0x000000} transparent opacity={0.09} />
-      </mesh>
-
-      <mesh ref={hclBeakerRef} position={[LEFT_X, -0.15, GLASS_Z]} castShadow>
-        <cylinderGeometry args={[0.62, 0.57, 1.9, 48]} />
-        <primitive object={GLASS} attach="material" />
-      </mesh>
-
-      <mesh position={[-2.44, 0.58, 1.16]}>
-        <boxGeometry args={[0.02, 1.36, 0.02]} />
-        <meshStandardMaterial color={0xffffff} transparent opacity={0.28} />
-      </mesh>
-
-      <mesh position={[LEFT_X, 0.8, GLASS_Z]}>
-        <torusGeometry args={[0.46, 0.03, 12, 64]} />
-        <primitive object={glassMat} attach="material" />
-      </mesh>
-
-      {[1, 2, 3].map((i) => (
-        <mesh
-          key={`left-ring-${i}`}
-          position={[LEFT_X, -1.1 + (i * 1.9) / 4, GLASS_Z + 0.02]}
-        >
-          <torusGeometry args={[0.47, 0.005, 4, 32, Math.PI * 0.3]} />
-          <meshStandardMaterial color={0xffffff} transparent opacity={0.4} />
-        </mesh>
-      ))}
-
-      {beakerMarks.map((mark, idx) => (
-        <mesh
-          key={`left-beaker-mark-${idx}`}
-          position={[LEFT_X + 0.02, mark.y, 1.3]}
-        >
-          <boxGeometry args={[mark.major ? 0.2 : 0.12, 0.005, 0.01]} />
-          <meshStandardMaterial color={0x223248} transparent opacity={0.78} />
-        </mesh>
-      ))}
-
-      <mesh ref={leftLiquidRef} position={[LEFT_X, -0.6, GLASS_Z]}>
-        <cylinderGeometry
-          args={[
-            beakerInnerRadius * 0.95,
-            beakerInnerRadius * 0.95,
-            beakerHeight * 0.45,
-            32,
-          ]}
-        />
-        <primitive object={liquidHClMat} attach="material" />
-      </mesh>
-
-      <mesh position={[LEFT_X, -0.17, GLASS_Z]}>
-        <cylinderGeometry args={[0.47, 0.5, 0.02, 48]} />
-        <meshPhysicalMaterial
-          color={0xe8f2ff}
-          transparent
-          opacity={0.56}
-          transmission={0.8}
-          roughness={0.06}
-        />
-      </mesh>
-
-      <sprite position={[LEFT_X, 1.25, LABEL_Z]} scale={[0.82, 0.3, 1]}>
-        <spriteMaterial map={hclLabelTexture} transparent depthWrite={false} />
-      </sprite>
-
-      <mesh position={[LEFT_X - 0.28, 1.25, LABEL_Z + 0.01]}>
-        <circleGeometry args={[0.045, 20]} />
-        <meshBasicMaterial color={0xdbe9ff} transparent opacity={0.92} />
-      </mesh>
-
-      <mesh ref={naohBeakerRef} position={[RIGHT_X, -0.15, GLASS_Z]} castShadow>
-        <cylinderGeometry args={[0.62, 0.57, 1.9, 48]} />
-        <primitive object={GLASS} attach="material" />
-      </mesh>
-
-      <mesh position={[2.44, 0.58, 1.16]}>
-        <boxGeometry args={[0.02, 1.36, 0.02]} />
-        <meshStandardMaterial color={0xffffff} transparent opacity={0.28} />
-      </mesh>
-
-      <mesh position={[RIGHT_X, 0.8, GLASS_Z]}>
-        <torusGeometry args={[0.46, 0.03, 12, 64]} />
-        <primitive object={glassMat} attach="material" />
-      </mesh>
-
-      {[1, 2, 3].map((i) => (
-        <mesh
-          key={`right-ring-${i}`}
-          position={[RIGHT_X, -1.1 + (i * 1.9) / 4, GLASS_Z + 0.02]}
-        >
-          <torusGeometry args={[0.47, 0.005, 4, 32, Math.PI * 0.3]} />
-          <meshStandardMaterial color={0xffffff} transparent opacity={0.4} />
-        </mesh>
-      ))}
-
-      {beakerMarks.map((mark, idx) => (
-        <mesh
-          key={`right-beaker-mark-${idx}`}
-          position={[RIGHT_X - 0.02, mark.y, 1.3]}
-        >
-          <boxGeometry args={[mark.major ? 0.2 : 0.12, 0.005, 0.01]} />
-          <meshStandardMaterial color={0x223248} transparent opacity={0.78} />
-        </mesh>
-      ))}
-
-      <mesh ref={rightLiquidRef} position={[RIGHT_X, -0.6, GLASS_Z]}>
-        <cylinderGeometry
-          args={[
-            beakerInnerRadius * 0.95,
-            beakerInnerRadius * 0.95,
-            beakerHeight * 0.45,
-            32,
-          ]}
-        />
-        <primitive object={liquidNaOHMat} attach="material" />
-      </mesh>
-
-      <mesh position={[RIGHT_X, -0.17, GLASS_Z]}>
-        <cylinderGeometry args={[0.47, 0.5, 0.02, 48]} />
-        <meshPhysicalMaterial
-          color={0xcae6ff}
-          transparent
-          opacity={0.58}
-          transmission={0.85}
-          roughness={0.06}
-        />
-      </mesh>
-
-      <sprite position={[RIGHT_X, 1.25, LABEL_Z]} scale={[1.05, 0.3, 1]}>
-        <spriteMaterial map={naohLabelTexture} transparent depthWrite={false} />
-      </sprite>
-
-      <mesh position={[RIGHT_X - 0.37, 1.25, LABEL_Z + 0.01]}>
-        <circleGeometry args={[0.045, 20]} />
-        <meshBasicMaterial color={0x8ec4ff} transparent opacity={0.92} />
+      {/* Back wall */}
+      <mesh position={[0, 1.5, -1.5]}>
+        <planeGeometry args={[10, 5]} />
+        <meshStandardMaterial color={0x1a2035} roughness={0.9} />
       </mesh>
 
       <mesh
-        ref={indicatorBeakerRef}
-        position={[0, -1.02, 0.82]}
-        onClick={onAction}
-        castShadow
+        position={[-5.9, 2.5, 0]}
+        rotation={[0, Math.PI / 2, 0]}
+        receiveShadow
       >
-        <latheGeometry args={[flaskProfile, 64]} />
-        <primitive object={GLASS} attach="material" />
-      </mesh>
-
-      <mesh position={[0, 0.92, 0.82]}>
-        <torusGeometry args={[0.27, 0.03, 12, 64]} />
-        <primitive object={glassMat} attach="material" />
-      </mesh>
-
-      {[1, 2, 3].map((i) => (
-        <mesh
-          key={`center-ring-${i}`}
-          position={[0.38, -1.04 + (i * 1.72) / 4, 0.96]}
-        >
-          <torusGeometry args={[0.22, 0.005, 4, 32, Math.PI * 0.3]} />
-          <meshStandardMaterial color={0xffffff} transparent opacity={0.4} />
-        </mesh>
-      ))}
-
-      <mesh position={[-0.06, -0.18, 1.32]}>
-        <boxGeometry args={[0.02, 1.65, 0.02]} />
-        <meshStandardMaterial color={0xffffff} transparent opacity={0.3} />
-      </mesh>
-
-      <mesh ref={flaskLiquidRef} position={[0, -0.86, 0.82]}>
-        <cylinderGeometry args={[0.44, 0.42, 0.5, 64]} />
-        <primitive object={liquidIndicatorMat} attach="material" />
-      </mesh>
-
-      <mesh position={[0, -0.54, 0.82]}>
-        <cylinderGeometry args={[0.5, 0.53, 0.02, 48]} />
+        <planeGeometry args={[9.2, 5]} />
         <meshStandardMaterial
-          color={flaskMeniscusHex}
-          transparent
-          opacity={0.72}
-          roughness={0.1}
+          map={concreteWall}
+          color={0xe5e9ed}
+          roughness={0.88}
+          metalness={0.02}
         />
       </mesh>
 
-      <mesh position={[0, -1.09, 0.82]}>
-        <sphereGeometry args={[0.44, 32, 16]} />
+      {/* Main bench top */}
+      <mesh position={[0, 0, 0]} receiveShadow>
+        <boxGeometry args={[5, 0.08, 2]} />
         <meshStandardMaterial
-          color={flaskBottomHex}
-          transparent
-          opacity={0.2}
+          color={0x252b33}
+          roughness={0.34}
+          metalness={0.08}
+          envMapIntensity={1.05}
         />
       </mesh>
 
-      <sprite position={[0, 1.24, 1.38]} scale={[1.2, 0.3, 1]}>
-        <spriteMaterial
-          map={indicatorLabelTexture}
-          transparent
-          depthWrite={false}
-        />
-      </sprite>
-
-      <mesh position={[-0.51, 1.24, 1.39]}>
-        <circleGeometry args={[0.045, 20]} />
-        <meshBasicMaterial color={0xd6e6ff} transparent opacity={0.92} />
+      {/* Bench legs */}
+      <mesh position={[-2.2, -0.84, -0.8]}>
+        <boxGeometry args={[0.08, 1.6, 0.08]} />
+        <meshStandardMaterial color={0x2a2f36} roughness={0.52} />
+      </mesh>
+      <mesh position={[2.2, -0.84, -0.8]}>
+        <boxGeometry args={[0.08, 1.6, 0.08]} />
+        <meshStandardMaterial color={0x2a2f36} roughness={0.52} />
+      </mesh>
+      <mesh position={[-2.2, -0.84, 0.8]}>
+        <boxGeometry args={[0.08, 1.6, 0.08]} />
+        <meshStandardMaterial color={0x2a2f36} roughness={0.52} />
+      </mesh>
+      <mesh position={[2.2, -0.84, 0.8]}>
+        <boxGeometry args={[0.08, 1.6, 0.08]} />
+        <meshStandardMaterial color={0x2a2f36} roughness={0.52} />
       </mesh>
 
-      <mesh position={[0.83, -0.18, 0.82]}>
-        <boxGeometry args={[0.18, 1.58, 0.02]} />
-        <meshStandardMaterial color={0xf7f8fb} transparent opacity={0.22} />
-      </mesh>
-
-      {Array.from({ length: 9 }).map((_, idx) => (
-        <mesh
-          key={`flask-mark-${idx}`}
-          position={[0.87, -0.88 + idx * 0.18, 0.83]}
-        >
-          <boxGeometry args={[0.14, 0.005, 0.01]} />
-          <meshStandardMaterial color={0x26364c} transparent opacity={0.75} />
-        </mesh>
-      ))}
-
-      <mesh position={[0, -1.12, -0.52]} receiveShadow>
-        <boxGeometry args={[1.7, 0.12, 0.92]} />
-        <meshStandardMaterial
-          color={0xbac1cc}
-          roughness={0.58}
-          metalness={0.35}
-        />
-      </mesh>
-
-      <mesh position={[0, 1.88, -0.52]} castShadow>
-        <cylinderGeometry args={[0.045, 0.045, 5.6, 20]} />
-        <meshStandardMaterial
-          color={0xb1bac5}
-          roughness={0.45}
-          metalness={0.55}
-        />
-      </mesh>
-
-      <mesh position={[0, 2.64, -0.52]} castShadow>
-        <boxGeometry args={[1.02, 0.08, 0.1]} />
-        <meshStandardMaterial
-          color={0xaab2bf}
-          roughness={0.48}
-          metalness={0.48}
-        />
-      </mesh>
-
-      <mesh position={[0, 1.06, -0.52]} castShadow>
-        <cylinderGeometry args={[0.032, 0.032, 3.46, 20]} />
-        <primitive object={glassMat} attach="material" />
-      </mesh>
-
-      <mesh position={[-0.03, 2.27, -0.49]}>
-        <boxGeometry args={[0.012, 0.3, 0.018]} />
-        <meshStandardMaterial color={0xffffff} transparent opacity={0.32} />
-      </mesh>
-
-      {buretteMarks.map((mark, idx) => (
-        <mesh key={`burette-mark-${idx}`} position={[0.07, mark.y, -0.16]}>
-          <boxGeometry args={[mark.major ? 0.12 : 0.07, 0.004, 0.01]} />
-          <meshStandardMaterial color={0x223248} transparent opacity={0.8} />
-        </mesh>
-      ))}
-
-      <mesh position={[0, -0.72, -0.52]} castShadow>
-        <boxGeometry args={[0.2, 0.06, 0.18]} />
-        <meshStandardMaterial
-          color={0x8592a3}
-          roughness={0.45}
-          metalness={0.4}
-        />
-      </mesh>
-
-      <mesh position={[0, -0.8, -0.34]} castShadow>
-        <cylinderGeometry args={[0.014, 0.014, 0.23, 16]} />
-        <meshStandardMaterial color={0xf1f6ff} transparent opacity={0.2} />
-      </mesh>
-
-      <mesh ref={dropletRef} position={[0, -0.2, -0.24]} castShadow>
-        <sphereGeometry args={[0.028, 24, 24]} />
-        <meshPhysicalMaterial
-          color={0xdff2ff}
-          transmission={0.92}
-          roughness={0.03}
-          thickness={0.2}
-          transparent
-          opacity={0.65}
-        />
-      </mesh>
-
-      <mesh ref={pourStreamRef} position={[0, -0.45, -0.35]} castShadow>
-        <cylinderGeometry args={[0.018, 0.012, 0.64, 20]} />
-        <meshPhysicalMaterial
-          color={0xe0f2ff}
-          transparent
-          opacity={0.06}
-          transmission={0.9}
-          roughness={0.02}
-          thickness={0.25}
-        />
-      </mesh>
-
-      <group position={[1.18, -0.69, 0.78]} rotation={[0.14, 0.24, 0.18]}>
+      {/* Beakers */}
+      <group position={[-1.2, 0.39, 0.1]}>
         <mesh castShadow>
-          <cylinderGeometry args={[0.03, 0.03, 2.42, 24]} />
+          <cylinderGeometry args={[0.22, 0.19, 0.7, 48, 1, true]} />
+          <primitive object={glassMaterial} attach="material" />
+        </mesh>
+        <mesh position={[0, -0.35, 0]}>
+          <circleGeometry args={[0.19, 48]} />
+          <primitive object={glassMaterial} attach="material" />
+        </mesh>
+        <mesh position={[0, -0.35 + 0.125, 0]}>
+          <cylinderGeometry args={[0.17, 0.17, 0.25, 48]} />
           <meshPhysicalMaterial
-            color={0xeef4ff}
+            color={0x4d9cff}
+            transmission={0.55}
+            roughness={0.08}
             transparent
-            opacity={0.45}
-            transmission={0.9}
-            roughness={0.06}
-            thickness={0.22}
-            normalMap={rodScratchTexture}
-            clearcoat={1}
-            clearcoatRoughness={0.07}
+            opacity={0.82}
+            ior={1.33}
+            thickness={0.3}
           />
         </mesh>
       </group>
 
-      <group position={[4.1, -1.02, -1.2]}>
-        <mesh castShadow position={[0, 0.45, 0]}>
-          <capsuleGeometry args={[0.24, 1.25, 8, 16]} />
-          <meshStandardMaterial
-            color={0xecf1fb}
-            roughness={0.6}
-            metalness={0.02}
-          />
+      <group position={[1.2, 0.39, 0.1]}>
+        <mesh castShadow>
+          <cylinderGeometry args={[0.22, 0.19, 0.7, 48, 1, true]} />
+          <primitive object={glassMaterial} attach="material" />
         </mesh>
-        <mesh castShadow position={[0, 1.02, 0.02]} ref={avatarHeadRef}>
-          <sphereGeometry args={[0.18, 24, 24]} />
-          <meshStandardMaterial color={0xcfa58f} roughness={0.68} />
+        <mesh position={[0, -0.35, 0]}>
+          <circleGeometry args={[0.19, 48]} />
+          <primitive object={glassMaterial} attach="material" />
         </mesh>
-        <mesh castShadow position={[0, 0.78, 0.22]}>
-          <boxGeometry args={[0.24, 0.14, 0.03]} />
-          <meshStandardMaterial
-            color={0x11161e}
-            roughness={0.4}
-            metalness={0.1}
-          />
-        </mesh>
-        <mesh castShadow position={[0.24, 0.48, 0]} rotation={[0, 0, -0.45]}>
-          <capsuleGeometry args={[0.055, 0.5, 6, 10]} />
-          <meshStandardMaterial
-            color={0xdbe6f7}
-            roughness={0.64}
-            metalness={0.02}
-          />
-        </mesh>
-        <mesh castShadow position={[-0.24, 0.48, 0]} rotation={[0, 0, 0.45]}>
-          <capsuleGeometry args={[0.055, 0.5, 6, 10]} />
-          <meshStandardMaterial
-            color={0xdbe6f7}
-            roughness={0.64}
-            metalness={0.02}
+        <mesh position={[0, -0.35 + 0.1, 0]}>
+          <cylinderGeometry args={[0.17, 0.17, 0.2, 48]} />
+          <meshPhysicalMaterial
+            color={0xb8f3c3}
+            transmission={0.55}
+            roughness={0.08}
+            transparent
+            opacity={0.82}
+            ior={1.33}
+            thickness={0.3}
           />
         </mesh>
       </group>
+
+      <mesh position={[0, 0.55, 0]} castShadow>
+        <cylinderGeometry args={[0.2, 0.25, 0.8, 48]} />
+        <primitive object={glassMaterial} attach="material" />
+      </mesh>
+      <mesh position={[0, 0.1, 0]}>
+        <cylinderGeometry args={[0.18, 0.04, 0.15, 48]} />
+        <meshPhysicalMaterial
+          color={0xff9ac8}
+          transmission={0.45}
+          transparent={true}
+          opacity={0.76}
+          ior={1.33}
+        />
+      </mesh>
+
+      {/* Burette */}
+      <mesh position={[0.8, 1.1, -0.3]}>
+        <cylinderGeometry args={[0.02, 0.02, 2.2, 16]} />
+        <meshStandardMaterial
+          color={0x444444}
+          metalness={0.9}
+          roughness={0.2}
+        />
+      </mesh>
+      <mesh position={[0.8, 1.3, -0.3]} castShadow>
+        <cylinderGeometry args={[0.04, 0.04, 1.8, 32, 1, true]} />
+        <primitive object={glassMaterial} attach="material" />
+      </mesh>
+      <mesh position={[0.8, 1.4, -0.3]}>
+        <cylinderGeometry args={[0.033, 0.033, 1.4, 32]} />
+        <meshPhysicalMaterial
+          color={0xb8f0b8}
+          transmission={0.55}
+          transparent={true}
+          opacity={0.72}
+          ior={1.33}
+        />
+      </mesh>
+      <mesh castShadow position={[0.13, 1.22, 0]}>
+        <boxGeometry args={[0.24, 0.08, 0.12]} />
+        <meshStandardMaterial
+          color={0xd5d9dd}
+          roughness={0.45}
+          metalness={0.82}
+        />
+      </mesh>
+      <mesh position={[0.23, 1.08, 0]} castShadow>
+        <cylinderGeometry args={[0.035, 0.018, 0.52, 20]} />
+        <primitive object={glassMaterial} attach="material" />
+      </mesh>
+      <mesh position={[0.4, 0.63, 0]} castShadow>
+        <cylinderGeometry args={[0.02, 0.02, 0.92, 20]} />
+        <primitive object={glassMaterial} attach="material" />
+      </mesh>
+
+      <rectAreaLight
+        color={0xffffff}
+        intensity={2.15}
+        width={6}
+        height={4}
+        position={[0, 4, 0]}
+        rotation={[-Math.PI / 2, 0, 0]}
+      />
+
+      <directionalLight
+        color={0xf3f7ff}
+        intensity={0.52}
+        position={[0, 3.2, 1.4]}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-near={0.5}
+        shadow-camera-far={10}
+        shadow-camera-left={-3}
+        shadow-camera-right={3}
+        shadow-camera-top={3}
+        shadow-camera-bottom={-3}
+        shadow-bias={-0.0002}
+      />
+
+      <hemisphereLight args={[0xb8d5ff, 0x1a1f2a, 0.22]} />
+      <pointLight color={0xdbe8ff} intensity={0.2} position={[-2, 1.8, 1.8]} />
+      <ambientLight color={0xffffff} intensity={0.64} />
     </group>
   );
+}
+
+function CanvasResizeSync({ containerRef }) {
+  const { gl, camera } = useThree();
+
+  useEffect(() => {
+    const syncSize = () => {
+      const container = containerRef.current;
+      if (!container) return;
+
+      const width =
+        container.clientWidth > 0
+          ? container.clientWidth
+          : Math.floor(window.innerWidth * 0.55);
+      const height =
+        container.clientHeight > 0
+          ? container.clientHeight
+          : Math.floor(window.innerHeight * 0.7);
+      const safeWidth = Math.max(1, width);
+      const safeHeight = Math.max(1, height);
+
+      gl.setSize(safeWidth, safeHeight);
+      camera.aspect = safeWidth / safeHeight;
+      camera.updateProjectionMatrix();
+    };
+
+    syncSize();
+    const rafId = window.requestAnimationFrame(syncSize);
+    window.addEventListener("resize", syncSize);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", syncSize);
+    };
+  }, [gl, camera, containerRef]);
+
+  return null;
 }
 
 export default function LabRenderer({
@@ -986,9 +858,72 @@ export default function LabRenderer({
   onAction,
 }) {
   const canvasContainerRef = useRef(null);
+  const [canvasHost, setCanvasHost] = useState(null);
+  const [canvasReady, setCanvasReady] = useState(false);
+  const [pourSignal, setPourSignal] = useState(0);
+
+  const setCanvasContainerRef = useCallback((node) => {
+    canvasContainerRef.current = node;
+    setCanvasHost(node);
+  }, []);
+
+  useEffect(() => {
+    if (!canvasHost) {
+      setCanvasReady(false);
+      return;
+    }
+
+    const updateReadyState = () => {
+      const width = canvasHost.clientWidth;
+      const height = canvasHost.clientHeight;
+      setCanvasReady(width > 0 && height > 0);
+    };
+
+    updateReadyState();
+
+    let observer = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(updateReadyState);
+      observer.observe(canvasHost);
+    }
+
+    const rafId = window.requestAnimationFrame(updateReadyState);
+    window.addEventListener("resize", updateReadyState);
+
+    return () => {
+      window.cancelAnimationFrame(rafId);
+      window.removeEventListener("resize", updateReadyState);
+      observer?.disconnect();
+    };
+  }, [canvasHost]);
+
   const chem = useMemo(
     () => getChemState(experimentId, completedSteps, animating),
     [experimentId, completedSteps, animating],
+  );
+
+  const labels = useMemo(
+    () => [
+      {
+        name: "AgNO3",
+        concentration: "0.1M",
+        volume: `${(12 - Math.min(12, pourSignal * 0.6)).toFixed(1)} mL`,
+        position: new THREE.Vector3(-1.25, 1.95, 0.22),
+      },
+      {
+        name: "NaCl",
+        concentration: "0.1M",
+        volume: "12.0 mL",
+        position: new THREE.Vector3(1.25, 1.95, 0.22),
+      },
+      {
+        name: "Reaction Vessel",
+        concentration: "AgCl formation",
+        volume: `${(6 + Math.min(12, pourSignal * 0.6)).toFixed(1)} mL`,
+        position: new THREE.Vector3(0, 2.05, 0),
+      },
+    ],
+    [pourSignal],
   );
 
   const onWorkspaceDrop = (e) => {
@@ -1008,6 +943,10 @@ export default function LabRenderer({
     } catch {
       // Ignore malformed payloads from drag source.
     }
+  };
+
+  const triggerPour = () => {
+    setPourSignal((v) => v + 1);
   };
 
   return (
@@ -1041,138 +980,56 @@ export default function LabRenderer({
           </div>
         </div>
 
-        <div className="lab-canvas" ref={canvasContainerRef}>
-          <Canvas
-            shadows
-            dpr={[1, 2]}
-            camera={{
-              position: [1.7, 3.15, 7.05],
-              fov: 52,
-              near: 0.1,
-              far: 1000,
-            }}
-            gl={{ antialias: true }}
-            onCreated={({ gl, camera, scene }) => {
-              const renderer = gl;
-              gl.outputColorSpace = THREE.SRGBColorSpace;
-              renderer.shadowMap.enabled = true;
-              renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-              renderer.toneMapping = THREE.ACESFilmicToneMapping;
-              renderer.toneMappingExposure = 0.8;
-              renderer.outputColorSpace = THREE.SRGBColorSpace;
-              renderer.physicallyCorrectLights = true;
+        <div
+          className="lab-canvas"
+          id="lab-canvas-container"
+          ref={setCanvasContainerRef}
+        >
+          <button type="button" className="pour-button" onClick={triggerPour}>
+            Pour AgNO3
+          </button>
 
-              scene.background = new THREE.Color(0x060d18);
-              scene.fog = null;
+          {canvasReady ? (
+            <Canvas
+              shadows
+              dpr={[1, 2]}
+              gl={{ antialias: true }}
+              camera={{
+                position: [0, 1.8, 3.5],
+                fov: 44,
+                near: 0.1,
+                far: 100,
+              }}
+            >
+              <RendererConfig containerRef={canvasContainerRef} />
+              <EnvironmentReflections />
+              <CanvasResizeSync containerRef={canvasContainerRef} />
+              <CameraBob />
 
-              const container = canvasContainerRef.current;
-              if (container) {
-                gl.setSize(container.clientWidth, container.clientHeight);
-              }
+              <LabScene
+                chem={chem}
+                pourSignal={pourSignal}
+                onAction={() => onAction?.(expectedStepId)}
+              />
 
-              camera.position.set(1.7, 3.15, 7.05);
-              camera.lookAt(0, 0.2, 0);
-              camera.fov = 52;
-              camera.updateProjectionMatrix();
-            }}
-          >
-            <InitialCameraPose />
-            <CanvasResizeSync containerRef={canvasContainerRef} />
+              <OrbitControls
+                target={[0, 0.5, 0]}
+                enableDamping
+                dampingFactor={0.05}
+                minDistance={2}
+                maxDistance={6}
+                maxPolarAngle={Math.PI / 2.1}
+                minPolarAngle={0.55}
+              />
 
-            <Environment preset="warehouse" />
-
-            <directionalLight
-              color={0xffffff}
-              intensity={1.18}
-              position={[-3.8, 7.4, 2.6]}
-              castShadow
-              shadow-mapSize-width={2048}
-              shadow-mapSize-height={2048}
-              shadow-camera-near={0.1}
-              shadow-camera-far={24}
-              shadow-bias={-0.0003}
-              shadow-normalBias={0.015}
-              shadow-radius={4}
-            />
-
-            <directionalLight
-              color={0xffffff}
-              intensity={0.24}
-              position={[0.4, 2.5, 7.2]}
-            />
-
-            <directionalLight
-              color={0xd1ddf2}
-              intensity={0.36}
-              position={[2.3, 2.4, -5.1]}
-            />
-
-            <pointLight
-              color={0xffffff}
-              intensity={0.22}
-              position={[-4.4, 2, -0.2]}
-              distance={10}
-              decay={2}
-            />
-
-            <pointLight
-              color={0xffffff}
-              intensity={0.16}
-              position={[4.6, 2.2, 2.8]}
-              distance={10}
-              decay={2}
-            />
-
-            <ambientLight color={0x9ab0cf} intensity={0.08} />
-
-            <RebuiltLabScene
-              onAction={() => onAction?.(expectedStepId)}
-              chem={chem}
-              animating={animating}
-            />
-
-            <ContactShadows
-              position={[0, -1.12, 0]}
-              opacity={0.58}
-              blur={2.8}
-              far={9}
-              scale={10.6}
-              resolution={1024}
-            />
-
-            <OrbitControls
-              target={[0, 0.05, 0]}
-              enableDamping
-              dampingFactor={0.08}
-              minDistance={4.6}
-              maxDistance={9.8}
-              minPolarAngle={0.62}
-              maxPolarAngle={1.3}
-            />
-          </Canvas>
+              <FloatingLabels
+                containerRef={canvasContainerRef}
+                labels={labels}
+              />
+            </Canvas>
+          ) : null}
         </div>
       </div>
     </div>
   );
-}
-
-function CanvasResizeSync({ containerRef }) {
-  const { gl } = useThree();
-
-  useEffect(() => {
-    const syncSize = () => {
-      const container = containerRef.current;
-      if (!container) return;
-      gl.setSize(container.clientWidth, container.clientHeight);
-    };
-
-    syncSize();
-    window.addEventListener("resize", syncSize);
-
-    return () => {
-      window.removeEventListener("resize", syncSize);
-    };
-  }, [gl, containerRef]);
-
-  return null;
 }
