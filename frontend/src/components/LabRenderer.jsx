@@ -8,7 +8,7 @@ function InitialCameraPose() {
   const { camera } = useThree();
 
   useEffect(() => {
-    camera.position.set(0, 5, 11);
+    camera.position.set(0, 4, 9);
     camera.lookAt(0, 0, 0);
     camera.fov = 65;
     camera.updateProjectionMatrix();
@@ -162,74 +162,8 @@ function RebuiltLabScene({ onAction, chem }) {
     [],
   );
 
-  const tableTexture = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-
-    ctx.fillStyle = "#111820";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    for (let i = 0; i < 1400; i += 1) {
-      const shade = 18 + Math.floor(Math.random() * 28);
-      ctx.fillStyle = `rgba(${shade}, ${shade + 6}, ${shade + 10}, 0.18)`;
-      ctx.fillRect(
-        Math.random() * canvas.width,
-        Math.random() * canvas.height,
-        1,
-        1,
-      );
-    }
-
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.04)";
-    ctx.lineWidth = 1;
-    for (let i = 0; i < 6; i += 1) {
-      ctx.beginPath();
-      ctx.moveTo(0, Math.random() * canvas.height);
-      ctx.lineTo(canvas.width, Math.random() * canvas.height);
-      ctx.stroke();
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.wrapS = THREE.RepeatWrapping;
-    texture.wrapT = THREE.RepeatWrapping;
-    texture.repeat.set(2.4, 1.8);
-    texture.needsUpdate = true;
-    return texture;
-  }, []);
-
-  const backdropTexture = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 256;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
-
-    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-    grad.addColorStop(0, "#1a2636");
-    grad.addColorStop(0.55, "#111a29");
-    grad.addColorStop(1, "#0c1422");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.fillStyle = "rgba(140, 170, 205, 0.12)";
-    for (let i = 0; i < 8; i += 1) {
-      const y = 40 + i * 26;
-      ctx.fillRect(40, y, canvas.width - 80, 6);
-    }
-
-    ctx.fillStyle = "rgba(180, 210, 235, 0.08)";
-    for (let i = 0; i < 10; i += 1) {
-      const x = 60 + i * 40;
-      ctx.fillRect(x, 28, 10, canvas.height - 60);
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    return texture;
-  }, []);
+  const tableTexture = useMemo(() => null, []);
+  const backdropTexture = useMemo(() => null, []);
 
   useFrame(({ clock }) => {
     const t = clock.getElapsedTime();
@@ -271,12 +205,11 @@ function RebuiltLabScene({ onAction, chem }) {
       <mesh position={[0, 1.6, -6]}>
         <planeGeometry args={[20, 10]} />
         <meshStandardMaterial
-          map={backdropTexture}
-          color={0x9eb2c6}
+          color={0xa0b8d0}
           transparent
-          opacity={0.32}
+          opacity={0.42}
           emissive={new THREE.Color(0x1a2c42)}
-          emissiveIntensity={0.35}
+          emissiveIntensity={0.42}
           depthWrite={false}
         />
       </mesh>
@@ -284,9 +217,11 @@ function RebuiltLabScene({ onAction, chem }) {
       <mesh position={[0, -1.2, 0]} receiveShadow>
         <boxGeometry args={[12, 0.3, 6]} />
         <meshStandardMaterial
-          color={0x3a3a5a}
-          emissive={0x1a1a3a}
-          emissiveIntensity={0.4}
+          color={0x4a4a6a}
+          emissive={0x2a2a4a}
+          emissiveIntensity={0.45}
+          metalness={0.15}
+          roughness={0.65}
         />
       </mesh>
 
@@ -295,16 +230,16 @@ function RebuiltLabScene({ onAction, chem }) {
         <meshPhysicalMaterial
           color={0x7fbfff}
           transparent
-          opacity={0.65}
-          roughness={0.06}
+          opacity={0.85}
+          roughness={0.03}
           metalness={0.02}
-          specularIntensity={1.0}
+          specularIntensity={1.2}
           specularColor="#ffffff"
-          transmission={0.95}
-          thickness={0.28}
-          ior={1.49}
+          transmission={0.98}
+          thickness={0.32}
+          ior={1.52}
           clearcoat={1}
-          clearcoatRoughness={0.08}
+          clearcoatRoughness={0.04}
         />
       </mesh>
 
@@ -313,14 +248,18 @@ function RebuiltLabScene({ onAction, chem }) {
         <meshStandardMaterial color={0xffffff} />
       </mesh>
 
-      <mesh position={[-3.2, 0.78, 0.5]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh
+        position={[-3.2, 0.78, 0.5]}
+        rotation={[Math.PI / 2, 0, 0]}
+        castShadow
+      >
         <torusGeometry args={[0.64, 0.015, 12, 48]} />
         <meshStandardMaterial
           color={0xffffff}
-          emissive={0xaad9ff}
-          emissiveIntensity={0.35}
+          emissive={0xffffff}
+          emissiveIntensity={0.85}
           transparent
-          opacity={0.7}
+          opacity={0.9}
         />
       </mesh>
 
@@ -329,14 +268,20 @@ function RebuiltLabScene({ onAction, chem }) {
         <meshStandardMaterial
           color={0xff6f77}
           transparent
-          opacity={0.9}
-          roughness={0.12}
-          metalness={0.18}
+          opacity={0.88}
+          roughness={0.08}
+          metalness={0.35}
         />
       </mesh>
-      <mesh position={[-3.2, -0.16, 0.5]}>
-        <cylinderGeometry args={[0.56, 0.5, 0.06, 32]} />
-        <meshStandardMaterial color={0xff8d92} transparent opacity={0.62} />
+      <mesh position={[-3.2, -0.15, 0.5]}>
+        <cylinderGeometry args={[0.56, 0.5, 0.08, 32]} />
+        <meshStandardMaterial
+          color={0xffb8c1}
+          transparent
+          opacity={0.72}
+          roughness={0.04}
+          metalness={0.25}
+        />
       </mesh>
 
       <mesh position={[3.2, -0.2, 0.5]} castShadow>
@@ -344,16 +289,16 @@ function RebuiltLabScene({ onAction, chem }) {
         <meshPhysicalMaterial
           color={0x7fbfff}
           transparent
-          opacity={0.65}
-          roughness={0.06}
+          opacity={0.85}
+          roughness={0.03}
           metalness={0.02}
-          specularIntensity={1.0}
+          specularIntensity={1.2}
           specularColor="#ffffff"
-          transmission={0.95}
-          thickness={0.28}
-          ior={1.49}
+          transmission={0.98}
+          thickness={0.32}
+          ior={1.52}
           clearcoat={1}
-          clearcoatRoughness={0.08}
+          clearcoatRoughness={0.04}
         />
       </mesh>
 
@@ -362,14 +307,18 @@ function RebuiltLabScene({ onAction, chem }) {
         <meshStandardMaterial color={0xffffff} />
       </mesh>
 
-      <mesh position={[3.2, 0.78, 0.5]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh
+        position={[3.2, 0.78, 0.5]}
+        rotation={[Math.PI / 2, 0, 0]}
+        castShadow
+      >
         <torusGeometry args={[0.64, 0.015, 12, 48]} />
         <meshStandardMaterial
           color={0xffffff}
-          emissive={0xaad9ff}
-          emissiveIntensity={0.35}
+          emissive={0xffffff}
+          emissiveIntensity={0.85}
           transparent
-          opacity={0.7}
+          opacity={0.9}
         />
       </mesh>
 
@@ -378,16 +327,42 @@ function RebuiltLabScene({ onAction, chem }) {
         <meshStandardMaterial
           color={0x6b7bff}
           transparent
-          opacity={0.9}
-          roughness={0.12}
-          metalness={0.18}
+          opacity={0.88}
+          roughness={0.08}
+          metalness={0.35}
         />
       </mesh>
-      <mesh position={[3.2, -0.16, 0.5]}>
-        <cylinderGeometry args={[0.56, 0.5, 0.06, 32]} />
-        <meshStandardMaterial color={0x8aa3ff} transparent opacity={0.62} />
+      <mesh position={[3.2, -0.15, 0.5]}>
+        <cylinderGeometry args={[0.56, 0.5, 0.08, 32]} />
+        <meshStandardMaterial
+          color={0xadc2ff}
+          transparent
+          opacity={0.68}
+          roughness={0.04}
+          metalness={0.25}
+        />
       </mesh>
 
+      {/* Flask - realistic glass */}
+      <mesh position={[0, -1.0, 0.8]} onClick={onAction}>
+        <latheGeometry args={[flaskProfile, 48]} />
+        <meshPhysicalMaterial
+          color={0xb5e9ff}
+          transparent
+          opacity={0.57}
+          roughness={0.04}
+          metalness={0.04}
+          specularIntensity={1.2}
+          specularColor="#ffffff"
+          transmission={0.98}
+          thickness={0.32}
+          ior={1.52}
+          clearcoat={1}
+          clearcoatRoughness={0.04}
+        />
+      </mesh>
+
+      {/* Burette stand */}
       <mesh position={[0, -1.1, -0.5]}>
         <boxGeometry args={[1.8, 0.15, 1.0]} />
         <meshStandardMaterial color={0x888888} metalness={0.8} />
@@ -408,16 +383,16 @@ function RebuiltLabScene({ onAction, chem }) {
         <meshPhysicalMaterial
           color={0xc8f0ff}
           transparent
-          opacity={0.58}
-          roughness={0.08}
+          opacity={0.53}
+          roughness={0.04}
           metalness={0.04}
-          specularIntensity={1.0}
+          specularIntensity={1.2}
           specularColor="#ffffff"
-          transmission={0.95}
-          ior={1.48}
-          thickness={0.18}
+          transmission={0.98}
+          ior={1.51}
+          thickness={0.2}
           clearcoat={1}
-          clearcoatRoughness={0.08}
+          clearcoatRoughness={0.04}
         />
       </mesh>
 
@@ -433,32 +408,14 @@ function RebuiltLabScene({ onAction, chem }) {
         <meshStandardMaterial color={0xb8ebff} transparent opacity={0.85} />
       </mesh>
 
-      <mesh position={[0, -1.0, 0.8]} onClick={onAction}>
-        <latheGeometry args={[flaskProfile, 48]} />
-        <meshPhysicalMaterial
-          color={0xb5e9ff}
-          transparent
-          opacity={0.62}
-          roughness={0.08}
-          metalness={0.04}
-          specularIntensity={1.0}
-          specularColor="#ffffff"
-          transmission={0.95}
-          thickness={0.3}
-          ior={1.5}
-          clearcoat={1}
-          clearcoatRoughness={0.08}
-        />
-      </mesh>
-
-      <mesh position={[0, 1.3, 0.8]} rotation={[Math.PI / 2, 0, 0]}>
+      <mesh position={[0, 1.3, 0.8]} rotation={[Math.PI / 2, 0, 0]} castShadow>
         <torusGeometry args={[0.22, 0.012, 12, 48]} />
         <meshStandardMaterial
           color={0xffffff}
-          emissive={0xaad9ff}
-          emissiveIntensity={0.35}
+          emissive={0xffffff}
+          emissiveIntensity={0.88}
           transparent
-          opacity={0.7}
+          opacity={0.92}
         />
       </mesh>
 
@@ -581,7 +538,7 @@ export default function LabRenderer({
           <Canvas
             shadows
             dpr={[1, 2]}
-            camera={{ position: [0, 5, 11], fov: 65, near: 0.1, far: 1000 }}
+            camera={{ position: [0, 4, 9], fov: 65, near: 0.1, far: 1000 }}
             gl={{ antialias: true }}
             onCreated={({ gl, camera, scene }) => {
               gl.outputColorSpace = THREE.SRGBColorSpace;
@@ -589,16 +546,16 @@ export default function LabRenderer({
               gl.shadowMap.enabled = true;
               gl.shadowMap.type = THREE.PCFSoftShadowMap;
               gl.toneMappingExposure = 1.1;
-              scene.background = new THREE.Color(0x2a4a6a);
+              scene.background = new THREE.Color(0x0a1628);
               scene.scale.set(1.3, 1.3, 1.3);
-              scene.fog = new THREE.FogExp2(0x2a4a6a, 0.022);
+              scene.fog = null;
 
               const container = canvasContainerRef.current;
               if (container) {
                 gl.setSize(container.clientWidth, container.clientHeight);
               }
 
-              camera.position.set(0, 5, 11);
+              camera.position.set(0, 4, 9);
               camera.lookAt(0, 0, 0);
               camera.fov = 65;
               camera.updateProjectionMatrix();
@@ -607,12 +564,13 @@ export default function LabRenderer({
             <InitialCameraPose />
             <CanvasResizeSync containerRef={canvasContainerRef} />
 
-            <ambientLight color={0xffffff} intensity={4.0} />
+            {/* Bright, even lighting like a real lab */}
+            <ambientLight color={0xffffff} intensity={2.5} />
             <directionalLight
               color={0xffffff}
               castShadow
-              intensity={3.0}
-              position={[5, 10, 5]}
+              intensity={2.0}
+              position={[8, 10, 6]}
               shadow-mapSize-width={2048}
               shadow-mapSize-height={2048}
               shadow-camera-near={0.5}
@@ -624,32 +582,31 @@ export default function LabRenderer({
               shadow-bias={-0.0002}
               shadow-normalBias={0.02}
             />
-            <pointLight
-              color={0x8fd9f5}
-              intensity={2.5}
-              position={[-4, 4, 8]}
-              distance={20}
-              decay={1.5}
-            />
+            {/* Fill light from opposite side - white, no color */}
             <pointLight
               color={0xffffff}
-              castShadow
-              intensity={2.2}
-              position={[0, 6, 3]}
+              intensity={1.8}
+              position={[-6, 6, 8]}
+              distance={20}
+              decay={1.3}
+            />
+            {/* Top light */}
+            <pointLight
+              color={0xffffff}
+              intensity={1.5}
+              position={[0, 8, 0]}
               distance={16}
-              decay={1.8}
-              shadow-mapSize-width={1024}
-              shadow-mapSize-height={1024}
-              shadow-bias={-0.00015}
+              decay={1.4}
             />
 
+            {/* Very subtle shadows */}
             <ContactShadows
-              position={[0, -1.05, 0]}
-              opacity={0.48}
+              position={[0, -1.02, 0]}
+              opacity={0.15}
               width={13}
               height={7}
-              blur={2.2}
-              far={6.2}
+              blur={2.0}
+              far={6}
             />
 
             <RebuiltLabScene
