@@ -128,7 +128,6 @@ export default function ExperimentPage() {
   const [feedback, setFeedback] = useState(null); // { type: 'success'|'error', message }
   const [points, setPoints] = useState(user?.points || 0);
   const [newBadges, setNewBadges] = useState([]);
-  const [showAiTutor, setShowAiTutor] = useState(false);
   const [animating, setAnimating] = useState(null);
   const [pointsDelta, setPointsDelta] = useState(0);
   const [placedComponents, setPlacedComponents] = useState([]);
@@ -147,7 +146,6 @@ export default function ExperimentPage() {
     setExperimentComplete(false);
     setFeedback(null);
     setNewBadges([]);
-    setShowAiTutor(false);
     setAnimating(null);
     setPlacedComponents([]);
     setSelectedEquipmentId(null);
@@ -372,7 +370,6 @@ export default function ExperimentPage() {
     setExperimentComplete(false);
     setFeedback(null);
     setNewBadges([]);
-    setShowAiTutor(false);
     setPlacedComponents([]);
   };
 
@@ -464,6 +461,11 @@ export default function ExperimentPage() {
               ))}
             </div>
           </div>
+
+          <div className="theory-card lab-manual-left">
+            <h3>Lab Manual</h3>
+            <p>{experiment.theory}</p>
+          </div>
         </aside>
 
         {/* Center: Workspace */}
@@ -485,25 +487,18 @@ export default function ExperimentPage() {
           </div>
         </section>
 
-        {/* Right: Manual + AI + Progress */}
+        {/* Right: Guidance + Progress */}
         <aside className="lab-right">
-          <div className="instructor-card">
-            <div className="instructor-avatar-wrap">
-              <div className="instructor-avatar" aria-hidden="true">
-                <span className="avatar-emoji">🧑‍🔬</span>
-              </div>
-              <span className="instructor-status">Live Guidance</span>
-            </div>
-            <div className="instructor-copy">
-              <h3>Dr. Mira Sen</h3>
-              <p>
-                Maintain sterile handling and read meniscus at eye level.{" "}
-                {experimentComplete
-                  ? "Great work. Review your observations in the lab manual."
-                  : `Current focus: ${currentStep?.label || "Observe setup"}.`}
-              </p>
-            </div>
-          </div>
+          <AiTutor
+            experimentTitle={experiment.title}
+            experimentId={id}
+            currentStepIndex={currentStepIndex}
+            totalSteps={totalSteps}
+            currentStepLabel={currentStep?.label}
+            currentStepDescription={currentStep?.description}
+            educationalExplanation={educationalExplanation}
+            experimentComplete={experimentComplete}
+          />
 
           <div className="progress-section-card">
             <div className="progress-header-row">
@@ -518,12 +513,6 @@ export default function ExperimentPage() {
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-          </div>
-
-          {/* Theory Card */}
-          <div className="theory-card">
-            <h3>Lab Manual</h3>
-            <p>{experiment.theory}</p>
           </div>
 
           {/* Step Progress */}
@@ -557,98 +546,6 @@ export default function ExperimentPage() {
                 </div>
               ))}
             </div>
-          </div>
-
-          {!experimentComplete ? (
-            <div className="action-panel manual-panel">
-              <h3>Current Action</h3>
-              <p className="action-hint">
-                Current step: <strong>{currentStep?.label}</strong>
-              </p>
-              <p className="manual-note">
-                Interact directly with the lab equipment in the center
-                workspace. For liquids, you can drag bottles onto the flask or
-                click them.
-              </p>
-              {educationalExplanation && (
-                <div className="edu-note">
-                  <strong>Why this step matters:</strong>{" "}
-                  {educationalExplanation}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="completion-panel bounce-in">
-              <div className="completion-icon">🎉</div>
-              <h3>Experiment Complete!</h3>
-              <p>
-                You successfully completed <strong>{experiment.title}</strong>!
-              </p>
-              <div className="completion-points">
-                +
-                {experiment.completionPoints +
-                  experiment.steps.length * experiment.stepPoints}{" "}
-                points earned
-              </div>
-              {newBadges.length > 0 && (
-                <div className="new-badges">
-                  {newBadges.map((b) => (
-                    <span key={b} className="new-badge">
-                      🏅 {b}
-                    </span>
-                  ))}
-                </div>
-              )}
-              <div className="completion-actions">
-                <button
-                  className="btn-dashboard"
-                  onClick={() => navigate("/dashboard")}
-                >
-                  Back to Dashboard
-                </button>
-                <button className="btn-redo-exp" onClick={handleReset}>
-                  🔄 Redo Experiment
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* AI Tutor Section */}
-          <div className="ai-section">
-            <button
-              className="btn-ai-tutor"
-              onClick={() => setShowAiTutor(!showAiTutor)}
-            >
-              🤖 {showAiTutor ? "Hide AI Tutor" : "Ask AI Tutor"}
-            </button>
-
-            {showAiTutor && (
-              <AiTutor
-                experimentId={id}
-                currentStepIndex={currentStepIndex}
-                stepLabel={currentStep?.label || "Completed"}
-              />
-            )}
-          </div>
-
-          <div className="run-history-card">
-            <h3>Saved Results</h3>
-            {savedRuns.length === 0 ? (
-              <p className="run-history-empty">
-                No saved runs yet. Complete this experiment to store results.
-              </p>
-            ) : (
-              <div className="run-history-list">
-                {savedRuns.map((run, idx) => (
-                  <div className="run-item" key={`${run.completedAt}-${idx}`}>
-                    <span>{new Date(run.completedAt).toLocaleString()}</span>
-                    <span>
-                      +{run.pointsEarned} pts · {run.stepsCompleted} steps
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </aside>
       </div>

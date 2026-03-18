@@ -1,16 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { MeshReflectorMaterial, OrbitControls } from "@react-three/drei";
+import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import {
   CSS2DObject,
   CSS2DRenderer,
 } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
-import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
-import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
-import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
-import { SSAOPass } from "three/examples/jsm/postprocessing/SSAOPass.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { RectAreaLightUniformsLib } from "three/examples/jsm/lights/RectAreaLightUniformsLib.js";
 import "./LabRenderer.css";
@@ -199,123 +194,6 @@ function CameraBob() {
   return null;
 }
 
-function PostProcessing() {
-  const { gl, scene, camera, size } = useThree();
-  const composerRef = useRef(null);
-  const grainPassRef = useRef(null);
-
-  useEffect(() => {
-    const composer = new EffectComposer(gl);
-    const renderPass = new RenderPass(scene, camera);
-
-    const ssaoPass = new SSAOPass(scene, camera, size.width, size.height);
-    ssaoPass.kernelRadius = 14;
-    ssaoPass.minDistance = 0.005;
-    ssaoPass.maxDistance = 0.14;
-
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(size.width, size.height),
-      0.34,
-      0.35,
-      0.9,
-    );
-
-    const lensDistortionPass = new ShaderPass({
-      uniforms: {
-        tDiffuse: { value: null },
-        strength: { value: 0.03 },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float strength;
-        varying vec2 vUv;
-
-        void main() {
-          vec2 uv = vUv;
-          vec2 centered = uv * 2.0 - 1.0;
-          float r2 = dot(centered, centered);
-          centered *= 1.0 + strength * r2;
-          vec2 distorted = centered * 0.5 + 0.5;
-
-          if (distorted.x < 0.0 || distorted.x > 1.0 || distorted.y < 0.0 || distorted.y > 1.0) {
-            gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
-          } else {
-            gl_FragColor = texture2D(tDiffuse, distorted);
-          }
-        }
-      `,
-    });
-
-    const grainPass = new ShaderPass({
-      uniforms: {
-        tDiffuse: { value: null },
-        time: { value: 0 },
-        amount: { value: 0.03 },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform sampler2D tDiffuse;
-        uniform float time;
-        uniform float amount;
-        varying vec2 vUv;
-
-        float rand(vec2 co) {
-          return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
-        }
-
-        void main() {
-          vec4 color = texture2D(tDiffuse, vUv);
-          float grain = (rand(vUv + time * 0.07) - 0.5) * amount;
-          color.rgb += grain;
-          gl_FragColor = color;
-        }
-      `,
-    });
-
-    composer.addPass(renderPass);
-    composer.addPass(ssaoPass);
-    composer.addPass(bloomPass);
-    composer.addPass(lensDistortionPass);
-    composer.addPass(grainPass);
-
-    composerRef.current = composer;
-    grainPassRef.current = grainPass;
-
-    return () => {
-      composer.dispose();
-      composerRef.current = null;
-      grainPassRef.current = null;
-    };
-  }, [gl, scene, camera, size]);
-
-  useEffect(() => {
-    if (composerRef.current) {
-      composerRef.current.setSize(size.width, size.height);
-    }
-  }, [size]);
-
-  useFrame((_, delta) => {
-    if (!composerRef.current || !grainPassRef.current) return;
-    grainPassRef.current.uniforms.time.value += delta;
-    composerRef.current.render(delta);
-  }, 1);
-
-  return null;
-}
-
 function DustMotes() {
   const pointsRef = useRef(null);
   const count = 220;
@@ -492,7 +370,6 @@ function LabScene({ onAction, pourSignal, chem }) {
   const agNo3LiquidRef = useRef(null);
   const reactionLiquidRef = useRef(null);
   const streamRef = useRef(null);
-  const reactionGlowRef = useRef(null);
 
   const [isPouring, setIsPouring] = useState(false);
   const [precipitateActive, setPrecipitateActive] = useState(false);
@@ -519,20 +396,45 @@ function LabScene({ onAction, pourSignal, chem }) {
   const glassMaterial = useMemo(
     () =>
       new THREE.MeshPhysicalMaterial({
-        color: 0xf7fbff,
+        color: 0xf4f6f8,
         metalness: 0,
-        roughness: 0.035,
-        transmission: 0.94,
-        thickness: 0.9,
-        ior: 1.48,
+        roughness: 0.04,
+        transmission: 0.95,
+        thickness: 1.05,
+        ior: 1.5,
         transparent: true,
+        opacity: 0.94,
         side: THREE.DoubleSide,
-        envMapIntensity: 1.45,
+        envMapIntensity: 1.08,
+        reflectivity: 0.55,
         clearcoat: 1,
-        clearcoatRoughness: 0.06,
-        attenuationColor: new THREE.Color(0xcfe6ff),
-        attenuationDistance: 1.2,
+        clearcoatRoughness: 0.08,
+        attenuationColor: new THREE.Color(0xe4e7ea),
+        attenuationDistance: 1.05,
       }),
+    [],
+  );
+
+  const markingHeights = useMemo(() => [-0.26, -0.14, -0.02, 0.1, 0.22], []);
+
+  const buretteMarkingHeights = useMemo(
+    () =>
+      Array.from({ length: 18 }, (_, i) =>
+        Number((0.46 - i * 0.085).toFixed(3)),
+      ),
+    [],
+  );
+
+  const flaskProfile = useMemo(
+    () => [
+      new THREE.Vector2(0.06, -0.36),
+      new THREE.Vector2(0.22, -0.31),
+      new THREE.Vector2(0.26, -0.15),
+      new THREE.Vector2(0.2, 0.08),
+      new THREE.Vector2(0.11, 0.24),
+      new THREE.Vector2(0.08, 0.4),
+      new THREE.Vector2(0.07, 0.55),
+    ],
     [],
   );
 
@@ -608,12 +510,7 @@ function LabScene({ onAction, pourSignal, chem }) {
       delta,
     );
 
-    if (reactionGlowRef.current) {
-      reactionFlashRef.current = Math.max(0, reactionFlashRef.current - delta);
-      const flash = Math.sin((1 - reactionFlashRef.current) * Math.PI) * 0.5;
-      reactionGlowRef.current.intensity =
-        reactionFlashRef.current > 0 ? flash : 0;
-    }
+    reactionFlashRef.current = Math.max(0, reactionFlashRef.current - delta);
   });
 
   return (
@@ -687,18 +584,35 @@ function LabScene({ onAction, pourSignal, chem }) {
           <circleGeometry args={[0.19, 48]} />
           <primitive object={glassMaterial} attach="material" />
         </mesh>
-        <mesh position={[0, -0.35 + 0.125, 0]}>
+        <mesh ref={agNo3LiquidRef} position={[0, -0.35 + 0.125, 0]}>
           <cylinderGeometry args={[0.17, 0.17, 0.25, 48]} />
           <meshPhysicalMaterial
-            color={0x4d9cff}
+            color={0x6da4d6}
             transmission={0.55}
-            roughness={0.08}
+            roughness={0.06}
             transparent
-            opacity={0.82}
+            opacity={0.8}
             ior={1.33}
             thickness={0.3}
           />
         </mesh>
+        <mesh position={[0, -0.225, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.168, 40]} />
+          <meshPhysicalMaterial
+            color={0x7aaede}
+            transmission={0.45}
+            roughness={0.05}
+            transparent
+            opacity={0.76}
+            ior={1.33}
+          />
+        </mesh>
+        {markingHeights.map((y, i) => (
+          <mesh key={`beaker-left-mark-${i}`} position={[0.19, y, 0]}>
+            <boxGeometry args={[0.028, 0.004, 0.004]} />
+            <meshStandardMaterial color={0xd5dde6} roughness={0.4} />
+          </mesh>
+        ))}
       </group>
 
       <group position={[1.2, 0.39, 0.1]}>
@@ -713,35 +627,64 @@ function LabScene({ onAction, pourSignal, chem }) {
         <mesh position={[0, -0.35 + 0.1, 0]}>
           <cylinderGeometry args={[0.17, 0.17, 0.2, 48]} />
           <meshPhysicalMaterial
-            color={0xb8f3c3}
+            color={0xa8d1b0}
             transmission={0.55}
-            roughness={0.08}
+            roughness={0.06}
             transparent
-            opacity={0.82}
+            opacity={0.8}
             ior={1.33}
             thickness={0.3}
           />
         </mesh>
+        <mesh position={[0, -0.25, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[0.168, 40]} />
+          <meshPhysicalMaterial
+            color={0xb7ddbe}
+            transmission={0.45}
+            roughness={0.05}
+            transparent
+            opacity={0.76}
+            ior={1.33}
+          />
+        </mesh>
+        {markingHeights.map((y, i) => (
+          <mesh key={`beaker-right-mark-${i}`} position={[0.19, y, 0]}>
+            <boxGeometry args={[0.028, 0.004, 0.004]} />
+            <meshStandardMaterial color={0xd5dde6} roughness={0.4} />
+          </mesh>
+        ))}
       </group>
 
-      <mesh position={[0, 0.55, 0]} castShadow>
-        <cylinderGeometry args={[0.2, 0.25, 0.8, 48]} />
+      <mesh position={[0, 0.54, 0]} castShadow>
+        <latheGeometry args={[flaskProfile, 64]} />
         <primitive object={glassMaterial} attach="material" />
       </mesh>
-      <mesh position={[0, 0.1, 0]}>
-        <cylinderGeometry args={[0.18, 0.04, 0.15, 48]} />
+      <mesh ref={reactionLiquidRef} position={[0, 0.11, 0]}>
+        <cylinderGeometry args={[0.17, 0.09, 0.18, 48]} />
         <meshPhysicalMaterial
-          color={0xff9ac8}
-          transmission={0.45}
+          color={0xdfa6be}
+          transmission={0.5}
           transparent={true}
-          opacity={0.76}
+          opacity={0.74}
+          roughness={0.08}
+          ior={1.33}
+        />
+      </mesh>
+      <mesh position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.165, 40]} />
+        <meshPhysicalMaterial
+          color={0xe9b6cb}
+          transmission={0.45}
+          transparent
+          opacity={0.72}
+          roughness={0.05}
           ior={1.33}
         />
       </mesh>
 
       {/* Burette */}
       <mesh position={[0.8, 1.1, -0.3]}>
-        <cylinderGeometry args={[0.02, 0.02, 2.2, 16]} />
+        <cylinderGeometry args={[0.016, 0.016, 2.2, 16]} />
         <meshStandardMaterial
           color={0x444444}
           metalness={0.9}
@@ -749,17 +692,40 @@ function LabScene({ onAction, pourSignal, chem }) {
         />
       </mesh>
       <mesh position={[0.8, 1.3, -0.3]} castShadow>
-        <cylinderGeometry args={[0.04, 0.04, 1.8, 32, 1, true]} />
+        <cylinderGeometry args={[0.022, 0.022, 1.8, 32, 1, true]} />
         <primitive object={glassMaterial} attach="material" />
       </mesh>
       <mesh position={[0.8, 1.4, -0.3]}>
-        <cylinderGeometry args={[0.033, 0.033, 1.4, 32]} />
+        <cylinderGeometry args={[0.016, 0.016, 1.4, 32]} />
         <meshPhysicalMaterial
-          color={0xb8f0b8}
+          color={0xa5cda5}
           transmission={0.55}
           transparent={true}
-          opacity={0.72}
+          opacity={0.7}
+          roughness={0.06}
           ior={1.33}
+        />
+      </mesh>
+      {buretteMarkingHeights.map((y, i) => (
+        <mesh key={`burette-mark-${i}`} position={[0.824, 1.3 + y, -0.3]}>
+          <boxGeometry args={[0.014, 0.0028, 0.002]} />
+          <meshStandardMaterial color={0xd7dfe7} roughness={0.38} />
+        </mesh>
+      ))}
+      <mesh position={[0.8, 0.42, -0.3]} castShadow>
+        <boxGeometry args={[0.08, 0.018, 0.018]} />
+        <meshStandardMaterial
+          color={0xc7ced4}
+          metalness={0.55}
+          roughness={0.38}
+        />
+      </mesh>
+      <mesh position={[0.86, 0.4, -0.3]} castShadow>
+        <coneGeometry args={[0.007, 0.1, 16]} />
+        <meshStandardMaterial
+          color={0xcfd6dc}
+          metalness={0.34}
+          roughness={0.32}
         />
       </mesh>
       <mesh castShadow position={[0.13, 1.22, 0]}>
@@ -771,17 +737,39 @@ function LabScene({ onAction, pourSignal, chem }) {
         />
       </mesh>
       <mesh position={[0.23, 1.08, 0]} castShadow>
-        <cylinderGeometry args={[0.035, 0.018, 0.52, 20]} />
+        <cylinderGeometry args={[0.018, 0.013, 0.52, 20]} />
         <primitive object={glassMaterial} attach="material" />
       </mesh>
       <mesh position={[0.4, 0.63, 0]} castShadow>
-        <cylinderGeometry args={[0.02, 0.02, 0.92, 20]} />
+        <cylinderGeometry args={[0.011, 0.008, 0.92, 20]} />
         <primitive object={glassMaterial} attach="material" />
+      </mesh>
+      <mesh position={[0.4, 0.15, 0]} castShadow>
+        <coneGeometry args={[0.006, 0.12, 18]} />
+        <primitive object={glassMaterial} attach="material" />
+      </mesh>
+
+      {/* Soft contact shadows on bench */}
+      <mesh position={[-1.2, 0.042, 0.1]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.3, 32]} />
+        <meshBasicMaterial color={0x000000} transparent opacity={0.14} />
+      </mesh>
+      <mesh position={[1.2, 0.042, 0.1]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.3, 32]} />
+        <meshBasicMaterial color={0x000000} transparent opacity={0.14} />
+      </mesh>
+      <mesh position={[0, 0.042, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.34, 32]} />
+        <meshBasicMaterial color={0x000000} transparent opacity={0.12} />
+      </mesh>
+      <mesh position={[0.8, 0.042, -0.3]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[0.16, 32]} />
+        <meshBasicMaterial color={0x000000} transparent opacity={0.1} />
       </mesh>
 
       <rectAreaLight
         color={0xffffff}
-        intensity={2.15}
+        intensity={1.9}
         width={6}
         height={4}
         position={[0, 4, 0]}
@@ -789,24 +777,28 @@ function LabScene({ onAction, pourSignal, chem }) {
       />
 
       <directionalLight
-        color={0xf3f7ff}
-        intensity={0.52}
-        position={[0, 3.2, 1.4]}
+        color={0xffffff}
+        intensity={0.48}
+        position={[0, 3.1, 1.1]}
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={1536}
+        shadow-mapSize-height={1536}
         shadow-camera-near={0.5}
-        shadow-camera-far={10}
-        shadow-camera-left={-3}
-        shadow-camera-right={3}
+        shadow-camera-far={11}
+        shadow-camera-left={-3.1}
+        shadow-camera-right={3.1}
         shadow-camera-top={3}
-        shadow-camera-bottom={-3}
-        shadow-bias={-0.0002}
+        shadow-camera-bottom={-2.5}
+        shadow-bias={-0.00015}
+        shadow-normalBias={0.015}
       />
 
-      <hemisphereLight args={[0xb8d5ff, 0x1a1f2a, 0.22]} />
-      <pointLight color={0xdbe8ff} intensity={0.2} position={[-2, 1.8, 1.8]} />
-      <ambientLight color={0xffffff} intensity={0.64} />
+      <directionalLight
+        color={0xffffff}
+        intensity={0.2}
+        position={[0, 1.9, 2.9]}
+      />
+      <ambientLight color={0xffffff} intensity={0.58} />
     </group>
   );
 }

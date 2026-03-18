@@ -1,83 +1,155 @@
-import { useState } from "react";
-import axios from "axios";
+import { useMemo, useRef, useState } from "react";
 import "./AiTutor.css";
 
-export default function AiTutor({ experimentId, currentStepIndex, stepLabel }) {
-  const [guidance, setGuidance] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [asked, setAsked] = useState(false);
+function makeReply({
+  text,
+  experimentTitle,
+  currentStepLabel,
+  currentStepDescription,
+  educationalExplanation,
+  currentStepIndex,
+  totalSteps,
+  experimentComplete,
+}) {
+  const q = text.toLowerCase();
 
-  const askTutor = async () => {
-    setLoading(true);
-    setGuidance("");
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.post(
-        "/ai/help",
-        {
-          experimentId,
-          currentStepIndex,
-        },
-        {
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
-      setGuidance(res.data.guidance);
-      setAsked(true);
-    } catch (err) {
-      setGuidance("AI Tutor is currently unavailable. Please try again later.");
-      setAsked(true);
-    } finally {
-      setLoading(false);
+  if (experimentComplete) {
+    return `You have completed ${experimentTitle}. Review your observations and compare them with expected outcomes in the lab manual.`;
+  }
+
+  if (q.includes("what is this") || q.includes("experiment")) {
+    return `${experimentTitle} demonstrates core lab concepts through guided steps. Focus on safety, sequence, and observations at each stage.`;
+  }
+
+  if (q.includes("next") || q.includes("step")) {
+    return `Next step: ${currentStepLabel || "Follow the highlighted step"}. ${currentStepDescription || "Proceed in order and verify changes in the workspace."}`;
+  }
+
+  if (q.includes("reaction") || q.includes("explain")) {
+    return educationalExplanation
+      ? educationalExplanation
+      : "Observe changes in color, clarity, or precipitate and relate them to reagent interactions in the current step.";
+  }
+
+  return `You are on step ${Math.min(currentStepIndex + 1, totalSteps)}/${totalSteps}. ${currentStepLabel || "Continue with the current highlighted action"}.`;
+}
+
+export default function AiTutor({
+  experimentTitle,
+  experimentId,
+  currentStepIndex,
+  totalSteps,
+  currentStepLabel,
+  currentStepDescription,
+  educationalExplanation,
+  experimentComplete,
+}) {
+  const [input, setInput] = useState("");
+  const [messages, setMessages] = useState([
+    {
+      role: "ai",
+      text: "I am your AI Tutor. Ask for the next step, reaction explanation, or experiment goal.",
+    },
+  ]);
+  const chatBodyRef = useRef(null);
+
+  const suggestions = useMemo(
+    () => ["What is this experiment?", "Next step?", "Explain reaction"],
+    [],
+  );
+
+  const appendConversation = (prompt) => {
+    const trimmed = prompt.trim();
+    if (!trimmed) return;
+
+    const aiText = makeReply({
+      text: trimmed,
+      experimentTitle,
+      currentStepLabel,
+      currentStepDescription,
+      educationalExplanation,
+      currentStepIndex,
+      totalSteps,
+      experimentComplete,
+    });
+
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", text: trimmed },
+      { role: "ai", text: aiText },
+    ]);
+
+    requestAnimationFrame(() => {
+      if (chatBodyRef.current) {
+        chatBodyRef.current.scrollTop = chatBodyRef.current.scrollHeight;
+      }
+    });
+  };
+
+  const onSend = () => {
+    appendConversation(input);
+    setInput("");
+  };
+
+  const onKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      onSend();
     }
   };
 
   return (
-    <div className="ai-tutor-panel fade-in">
-      <div className="ai-tutor-header">
-        <div className="ai-avatar">🤖</div>
-        <div className="ai-info">
-          <span className="ai-name">AI Science Tutor</span>
-          <span className="ai-status">Powered by Gemini AI</span>
+    <section className="ai-tutor-card" aria-label="AI Tutor">
+      <div className="ai-tutor-head">
+        <div className="ai-dot" aria-hidden="true" />
+        <div>
+          <p className="ai-tutor-title">AI Tutor</p>
+          <p className="ai-tutor-subtitle">Context-aware lab help</p>
         </div>
       </div>
 
-      <div className="ai-current-step">
-        <span className="step-badge">Current Step:</span>
-        <span className="step-name">{stepLabel}</span>
-      </div>
-
-      {!asked && !loading && (
-        <div className="ai-prompt-area">
-          <p className="ai-intro">
-            Need help with this step? Ask your AI tutor for a detailed
-            explanation and guidance!
-          </p>
-          <button className="btn-ask-now" onClick={askTutor}>
-            💬 Ask AI for Guidance
+      <div className="ai-chip-row">
+        {suggestions.map((label) => (
+          <button
+            key={label}
+            type="button"
+            className="ai-chip"
+            onClick={() => appendConversation(label)}
+          >
+            {label}
           </button>
-        </div>
-      )}
+        ))}
+      </div>
 
-      {loading && (
-        <div className="ai-loading">
-          <div className="ai-thinking">
-            <span className="dot d1" />
-            <span className="dot d2" />
-            <span className="dot d3" />
+      <div className="ai-chat-body" ref={chatBodyRef}>
+        {messages.map((msg, idx) => (
+          <div
+            key={`${msg.role}-${idx}`}
+            className={`ai-bubble ${msg.role === "user" ? "is-user" : "is-ai"}`}
+          >
+            {msg.text}
           </div>
-          <p>AI Tutor is thinking...</p>
-        </div>
-      )}
+        ))}
+      </div>
 
-      {asked && !loading && guidance && (
-        <div className="ai-response">
-          <div className="ai-response-text">{guidance}</div>
-          <button className="btn-ask-again" onClick={askTutor}>
-            🔄 Ask Again
-          </button>
-        </div>
-      )}
-    </div>
+      <div className="ai-input-row">
+        <input
+          className="ai-input"
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={onKeyDown}
+          placeholder="Ask AI Tutor..."
+          aria-label={`Ask AI Tutor about ${experimentTitle || experimentId}`}
+        />
+        <button type="button" className="ai-send" onClick={onSend}>
+          Send
+        </button>
+      </div>
+
+      <p className="ai-step-hint">
+        Step {Math.min(currentStepIndex + 1, totalSteps)}/{totalSteps}:{" "}
+        {currentStepLabel || "Ready"}
+      </p>
+    </section>
   );
 }
