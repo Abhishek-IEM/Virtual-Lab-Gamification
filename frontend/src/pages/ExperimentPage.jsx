@@ -489,17 +489,6 @@ export default function ExperimentPage() {
 
         {/* Right: Guidance + Progress */}
         <aside className="lab-right">
-          <AiTutor
-            experimentTitle={experiment.title}
-            experimentId={id}
-            currentStepIndex={currentStepIndex}
-            totalSteps={totalSteps}
-            currentStepLabel={currentStep?.label}
-            currentStepDescription={currentStep?.description}
-            educationalExplanation={educationalExplanation}
-            experimentComplete={experimentComplete}
-          />
-
           <div className="progress-section-card">
             <div className="progress-header-row">
               <span>Experiment Progress</span>
@@ -547,6 +536,17 @@ export default function ExperimentPage() {
               ))}
             </div>
           </div>
+
+          <AiTutor
+            experimentTitle={experiment.title}
+            experimentId={id}
+            currentStepIndex={currentStepIndex}
+            totalSteps={totalSteps}
+            currentStepLabel={currentStep?.label}
+            currentStepDescription={currentStep?.description}
+            educationalExplanation={educationalExplanation}
+            experimentComplete={experimentComplete}
+          />
         </aside>
       </div>
     </div>
