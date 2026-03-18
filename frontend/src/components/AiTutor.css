@@ -93,6 +93,8 @@
   font-weight: 600;
   transition: all 0.2s;
   align-self: flex-start;
+  box-shadow: 0 10px 24px rgba(76, 29, 149, 0.35);
+  backdrop-filter: blur(10px);
 }
 
 .btn-ask-now:hover {
@@ -165,6 +167,7 @@
   font-weight: 500;
   transition: all 0.2s;
   align-self: flex-start;
+  backdrop-filter: blur(10px);
 }
 
 .btn-ask-again:hover {

@@ -92,7 +92,14 @@ router.post("/step", authenticate, async (req, res) => {
       ) {
         user.badges.push("Lab Beginner");
       }
-      const chemistryExps = ["acid-base-neutralization", "water-distillation"];
+      const chemistryExps = [
+        "acid-base-titration",
+        "ph-indicator-testing",
+        "precipitation-reaction",
+        "neutralization-reaction",
+        "filtration-process",
+        "chemical-mixing-reactions",
+      ];
       const completedChem = chemistryExps.filter((id) =>
         user.experimentsCompleted.includes(id),
       );

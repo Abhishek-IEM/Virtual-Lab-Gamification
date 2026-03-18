@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 import toast from "react-hot-toast";
@@ -7,24 +7,112 @@ import LabRenderer from "../components/LabRenderer";
 import AiTutor from "../components/AiTutor";
 import "./ExperimentPage.css";
 
+const RUN_HISTORY_KEY = "chemistry-lab-run-history-v1";
+
 const STEP_TO_EQUIPMENT = {
-  "acid-base-neutralization": {
+  "acid-base-titration": {
+    "pipette-hcl": "pipette",
+    "add-phenolphthalein": "indicator-phenolphthalein",
+    "titrate-naoh": "burette",
+    "observe-endpoint": "flask",
+  },
+  "ph-indicator-testing": {
+    "prepare-sample": "sample-solution",
+    "add-phenolphthalein": "indicator-phenolphthalein",
+    "add-methyl-orange": "indicator-methyl-orange",
+    "record-ph": "ph-meter",
+  },
+  "precipitation-reaction": {
+    "pour-agno3": "agno3",
+    "add-nacl": "nacl",
+    "stir-mixture": "stirrer",
+    "observe-agcl": "beaker",
+  },
+  "neutralization-reaction": {
     "add-acid": "acid",
-    "add-indicator": "indicator",
     "add-base": "base",
+    "stir-neutralization": "stirrer",
+    "check-ph-neutral": "ph-meter",
   },
-  "simple-circuit": {
-    "place-battery": "battery",
-    "connect-switch": "switch",
-    "connect-bulb": "bulb",
-    "close-circuit": "wire",
+  "filtration-process": {
+    "setup-funnel": "funnel",
+    "insert-filter-paper": "filter-paper",
+    "pour-mixture": "precipitate-mixture",
+    "collect-filtrate": "flask",
   },
-  "water-distillation": {
-    "fill-flask": "flask",
-    "setup-condenser": "condenser",
-    "heat-water": "burner",
-    "collect-distillate": "collector",
+  "chemical-mixing-reactions": {
+    "add-reagent-a": "reagent-a",
+    "add-reagent-b": "reagent-b",
+    "add-carbonate": "carbonate",
+    "add-acid-gas": "acid",
   },
+};
+
+const STEP_EXPLANATIONS = {
+  "acid-base-titration": {
+    "pipette-hcl":
+      "Use volumetric transfer to keep acid volume accurate before titration.",
+    "add-phenolphthalein":
+      "Phenolphthalein stays colorless in acidic media and turns pink near endpoint.",
+    "titrate-naoh":
+      "NaOH is added gradually to avoid overshooting the equivalence point.",
+    "observe-endpoint":
+      "A faint permanent pink indicates slight excess base and a completed titration endpoint.",
+  },
+  "ph-indicator-testing": {
+    "prepare-sample":
+      "Prepare a clean sample so indicator response is not contaminated.",
+    "add-phenolphthalein":
+      "Phenolphthalein transitions around pH 8.2 to 10 and helps detect basic conditions.",
+    "add-methyl-orange":
+      "Methyl orange is red in acidic range and yellow near neutral/basic range.",
+    "record-ph":
+      "Cross-check observed colors with the pH scale from 0 to 14 for interpretation.",
+  },
+  "precipitation-reaction": {
+    "pour-agno3":
+      "Silver ions must be in solution before chloride is introduced.",
+    "add-nacl":
+      "Ag+ reacts with Cl- to form insoluble AgCl as a white precipitate.",
+    "stir-mixture":
+      "Gentle stirring increases contact between ions for complete precipitation.",
+    "observe-agcl":
+      "A cloudy white solid confirms precipitation reaction completion.",
+  },
+  "neutralization-reaction": {
+    "add-acid": "Establish acidic starting condition before neutralization.",
+    "add-base":
+      "Base is introduced to consume H+ ions and move pH toward neutral.",
+    "stir-neutralization":
+      "Stirring ensures homogeneous reaction and stable pH reading.",
+    "check-ph-neutral": "Final pH near 7 confirms successful neutralization.",
+  },
+  "filtration-process": {
+    "setup-funnel":
+      "A stable funnel setup prevents loss of mixture during transfer.",
+    "insert-filter-paper":
+      "Filter paper acts as porous barrier to retain precipitate.",
+    "pour-mixture": "Pour slowly to avoid tearing filter paper and overflow.",
+    "collect-filtrate":
+      "Clear filtrate indicates effective separation of solid residue.",
+  },
+  "chemical-mixing-reactions": {
+    "add-reagent-a":
+      "First reagent establishes the base composition of the mixture.",
+    "add-reagent-b":
+      "Second reagent can shift complexes and produce visible color transitions.",
+    "add-carbonate":
+      "Carbonate serves as precursor for gas evolution with acid.",
+    "add-acid-gas": "Acid reacts with carbonate to release CO2 bubbles.",
+  },
+};
+
+const EQUIPMENT_MISUSE_HINTS = {
+  acid: "Acid must be used in controlled steps to avoid unsafe or invalid sequence.",
+  base: "Base addition is step-sensitive because it changes pH rapidly.",
+  burette: "Burette is reserved for controlled titrant delivery.",
+  "ph-meter": "Use the pH meter only when solution is ready for measurement.",
+  funnel: "Funnel is used only in filtration setup stages.",
 };
 
 export default function ExperimentPage() {
@@ -44,6 +132,12 @@ export default function ExperimentPage() {
   const [animating, setAnimating] = useState(null);
   const [pointsDelta, setPointsDelta] = useState(0);
   const [placedComponents, setPlacedComponents] = useState([]);
+  const [educationalMode, setEducationalMode] = useState(true);
+  const [savedRuns, setSavedRuns] = useState([]);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState(null);
+  const [selectionSnackbar, setSelectionSnackbar] = useState("");
+  const [placementFeedback, setPlacementFeedback] = useState(null);
+  const demoStepOneAutoplayDoneRef = useRef(false);
 
   const token = localStorage.getItem("token");
 
@@ -56,7 +150,43 @@ export default function ExperimentPage() {
     setShowAiTutor(false);
     setAnimating(null);
     setPlacedComponents([]);
+    setSelectedEquipmentId(null);
+    setSelectionSnackbar("");
+    setPlacementFeedback(null);
+    demoStepOneAutoplayDoneRef.current = false;
     fetchExperiment();
+  }, [id]);
+
+  useEffect(() => {
+    if (!experiment || experimentComplete) return;
+    if (demoStepOneAutoplayDoneRef.current) return;
+    if (currentStepIndex !== 0) return;
+    if (completedSteps.length > 0) return;
+
+    const firstStepId = experiment.steps?.[0]?.id;
+    if (!firstStepId) return;
+
+    demoStepOneAutoplayDoneRef.current = true;
+    const timer = setTimeout(() => {
+      handleAction(firstStepId);
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [experiment, experimentComplete, currentStepIndex, completedSteps.length]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RUN_HISTORY_KEY);
+      if (!raw) {
+        setSavedRuns([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      const runs = Array.isArray(parsed?.[id]) ? parsed[id] : [];
+      setSavedRuns(runs);
+    } catch {
+      setSavedRuns([]);
+    }
   }, [id]);
 
   const fetchExperiment = async () => {
@@ -119,6 +249,28 @@ export default function ExperimentPage() {
 
         if (res.data.experimentComplete) {
           setExperimentComplete(true);
+          const runEntry = {
+            experimentId: id,
+            experimentTitle: experiment?.title,
+            completedAt: new Date().toISOString(),
+            totalPoints: res.data.totalPoints,
+            pointsEarned:
+              experiment?.completionPoints +
+              (experiment?.steps?.length || 0) * (experiment?.stepPoints || 0),
+            stepsCompleted:
+              experiment?.steps?.length || completedSteps.length + 1,
+          };
+          try {
+            const raw = localStorage.getItem(RUN_HISTORY_KEY);
+            const parsed = raw ? JSON.parse(raw) : {};
+            const existing = Array.isArray(parsed[id]) ? parsed[id] : [];
+            const updated = [runEntry, ...existing].slice(0, 8);
+            const next = { ...parsed, [id]: updated };
+            localStorage.setItem(RUN_HISTORY_KEY, JSON.stringify(next));
+            setSavedRuns(updated);
+          } catch {
+            // Ignore local persistence failure.
+          }
         } else {
           setCurrentStepIndex(res.data.nextStepIndex);
         }
@@ -150,6 +302,30 @@ export default function ExperimentPage() {
         y: position?.y ?? 55,
       },
     ]);
+
+    setPlacementFeedback({
+      id: `${equipmentId}-${Date.now()}`,
+      icon: equipment?.icon || "🧩",
+      name: equipment?.name || equipmentId,
+    });
+    setTimeout(() => setPlacementFeedback(null), 340);
+  };
+
+  const handleSelectEquipment = (equipmentId) => {
+    const equipment = experiment?.equipment?.find(
+      (eq) => eq.id === equipmentId,
+    );
+    setSelectedEquipmentId(equipmentId);
+    setSelectionSnackbar(
+      `${equipment?.name || equipmentId} selected — click workspace to place`,
+    );
+  };
+
+  const handleWorkspaceClickToPlace = async () => {
+    if (!selectedEquipmentId) return;
+    await handleEquipmentDrop(selectedEquipmentId, { x: 50, y: 58 });
+    setSelectedEquipmentId(null);
+    setSelectionSnackbar("");
   };
 
   const handleEquipmentDrop = async (equipmentId, position) => {
@@ -161,18 +337,26 @@ export default function ExperimentPage() {
     if (!expectedEquipmentId) {
       setFeedback({
         type: "error",
-        message: "Use the workspace control for this step.",
+        message:
+          "This step is observation-driven. Follow the current step instruction in the guidance panel.",
       });
       setTimeout(() => setFeedback(null), 2200);
       return;
     }
 
     if (equipmentId !== expectedEquipmentId) {
+      const expectedEq = experiment?.equipment?.find(
+        (eq) => eq.id === expectedEquipmentId,
+      );
+      const usedEq = experiment?.equipment?.find((eq) => eq.id === equipmentId);
+      const hint = EQUIPMENT_MISUSE_HINTS[equipmentId]
+        ? ` ${EQUIPMENT_MISUSE_HINTS[equipmentId]}`
+        : "";
       setFeedback({
         type: "error",
-        message: `Wrong equipment. Expected: ${expectedEquipmentId}.`,
+        message: `Wrong equipment: ${usedEq?.name || equipmentId}. Use ${expectedEq?.name || expectedEquipmentId} for this step.${hint}`,
       });
-      setTimeout(() => setFeedback(null), 2200);
+      setTimeout(() => setFeedback(null), 3200);
       return;
     }
 
@@ -209,6 +393,9 @@ export default function ExperimentPage() {
   const progressPercent = Math.round(
     (completedSteps.length / totalSteps) * 100,
   );
+  const educationalExplanation = educationalMode
+    ? STEP_EXPLANATIONS[id]?.[currentStep?.id]
+    : null;
 
   return (
     <div className="experiment-page">
@@ -233,6 +420,14 @@ export default function ExperimentPage() {
           <span className="points-label">⭐ Points</span>
           <span className="points-count">{points}</span>
         </div>
+        <button
+          className={`btn-edu-mode ${educationalMode ? "on" : "off"}`}
+          onClick={() => setEducationalMode((prev) => !prev)}
+        >
+          {educationalMode
+            ? "📘 Educational Mode: ON"
+            : "📘 Educational Mode: OFF"}
+        </button>
       </header>
 
       {/* Main Lab Layout */}
@@ -247,7 +442,7 @@ export default function ExperimentPage() {
             <div className="equipment-grid">
               {experiment.equipment.map((eq) => (
                 <div
-                  className={`equipment-item ${expectedEquipmentId === eq.id ? "target" : ""}`}
+                  className={`equipment-item ${expectedEquipmentId === eq.id ? "target" : ""} ${selectedEquipmentId === eq.id ? "selected" : ""}`}
                   key={eq.id}
                   draggable
                   onDragStart={(e) =>
@@ -256,7 +451,7 @@ export default function ExperimentPage() {
                       JSON.stringify({ equipmentId: eq.id, source: "shelf" }),
                     )
                   }
-                  onClick={() => handleEquipmentDrop(eq.id, { x: 50, y: 58 })}
+                  onClick={() => handleSelectEquipment(eq.id)}
                 >
                   <span className="eq-icon">{eq.icon}</span>
                   <div className="eq-info">
@@ -271,9 +466,7 @@ export default function ExperimentPage() {
 
         {/* Center: Workspace */}
         <section className="lab-center">
-          <div className="lab-viewport">
-            <div className="lab-viewport-title">Virtual Lab Workspace</div>
-
+          <div className="lab-viewport" onClick={handleWorkspaceClickToPlace}>
             <LabRenderer
               experimentId={id}
               completedSteps={completedSteps}
@@ -287,17 +480,6 @@ export default function ExperimentPage() {
               onDropEquipment={handleEquipmentDrop}
               onAction={handleAction}
             />
-
-            {/* Feedback Banner */}
-            {feedback && (
-              <div className={`feedback-banner ${feedback.type} fade-in`}>
-                {feedback.type === "success" ? "✅" : "❌"} {feedback.message}
-              </div>
-            )}
-
-            {pointsDelta > 0 && (
-              <div className="points-float">+{pointsDelta} pts</div>
-            )}
           </div>
         </section>
 
@@ -336,7 +518,9 @@ export default function ExperimentPage() {
                       ? "done"
                       : idx === currentStepIndex
                         ? "active"
-                        : "pending"
+                        : idx <= currentStepIndex
+                          ? "unlocked"
+                          : "pending"
                   }`}
                 >
                   <div className="step-number">
@@ -366,6 +550,12 @@ export default function ExperimentPage() {
                 workspace. For liquids, you can drag bottles onto the flask or
                 click them.
               </p>
+              {educationalExplanation && (
+                <div className="edu-note">
+                  <strong>Why this step matters:</strong>{" "}
+                  {educationalExplanation}
+                </div>
+              )}
             </div>
           ) : (
             <div className="completion-panel bounce-in">
@@ -418,6 +608,26 @@ export default function ExperimentPage() {
                 currentStepIndex={currentStepIndex}
                 stepLabel={currentStep?.label || "Completed"}
               />
+            )}
+          </div>
+
+          <div className="run-history-card">
+            <h3>Saved Results</h3>
+            {savedRuns.length === 0 ? (
+              <p className="run-history-empty">
+                No saved runs yet. Complete this experiment to store results.
+              </p>
+            ) : (
+              <div className="run-history-list">
+                {savedRuns.map((run, idx) => (
+                  <div className="run-item" key={`${run.completedAt}-${idx}`}>
+                    <span>{new Date(run.completedAt).toLocaleString()}</span>
+                    <span>
+                      +{run.pointsEarned} pts · {run.stepsCompleted} steps
+                    </span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </aside>
