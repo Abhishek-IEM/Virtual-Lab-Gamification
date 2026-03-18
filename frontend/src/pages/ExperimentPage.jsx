@@ -453,7 +453,9 @@ export default function ExperimentPage() {
                   }
                   onClick={() => handleSelectEquipment(eq.id)}
                 >
-                  <span className="eq-icon">{eq.icon}</span>
+                  <span className="eq-icon-shell">
+                    <span className="eq-icon">{eq.icon}</span>
+                  </span>
                   <div className="eq-info">
                     <span className="eq-name">{eq.name}</span>
                     <span className="eq-desc">{eq.description}</span>
@@ -485,6 +487,24 @@ export default function ExperimentPage() {
 
         {/* Right: Manual + AI + Progress */}
         <aside className="lab-right">
+          <div className="instructor-card">
+            <div className="instructor-avatar-wrap">
+              <div className="instructor-avatar" aria-hidden="true">
+                <span className="avatar-emoji">🧑‍🔬</span>
+              </div>
+              <span className="instructor-status">Live Guidance</span>
+            </div>
+            <div className="instructor-copy">
+              <h3>Dr. Mira Sen</h3>
+              <p>
+                Maintain sterile handling and read meniscus at eye level.{" "}
+                {experimentComplete
+                  ? "Great work. Review your observations in the lab manual."
+                  : `Current focus: ${currentStep?.label || "Observe setup"}.`}
+              </p>
+            </div>
+          </div>
+
           <div className="progress-section-card">
             <div className="progress-header-row">
               <span>Experiment Progress</span>
